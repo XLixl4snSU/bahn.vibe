@@ -74,11 +74,11 @@ async function getBestPrice(config: any): Promise<TrainResults | null> {
     produktgattungen: ["ICE", "EC_IC", "IR", "REGIONAL", "SBAHN", "BUS", "SCHIFF", "UBAHN", "TRAM", "ANRUFPFLICHTIG"],
     reisende: [
       {
-        typ: "ERWACHSENER",
+        typ: config.alter, 
         ermaessigungen: [
           {
-            art: "KEINE_ERMAESSIGUNG",
-            klasse: "KLASSENLOS",
+            art: config.ermaessigungArt || "KEINE_ERMAESSIGUNG",
+            klasse: config.ermaessigungKlasse || "KLASSENLOS",
           },
         ],
         alter: [],
@@ -273,6 +273,9 @@ export async function POST(request: NextRequest) {
       start,
       ziel,
       abfahrtab,
+      alter,
+      ermaessigungArt,
+      ermaessigungKlasse,
       klasse,
       schnelleVerbindungen,
       nurDeutschlandTicketVerbindungen,
@@ -317,6 +320,9 @@ export async function POST(request: NextRequest) {
         abfahrtsHalt: startStation.id,
         ankunftsHalt: zielStation.id,
         anfrageZeitpunkt: timestamp,
+        alter,
+        ermaessigungArt,
+        ermaessigungKlasse,
         klasse,
         maximaleUmstiege: Number.parseInt(maximaleUmstiege || "0"),
         schnelleVerbindungen: schnelleVerbindungen === true || schnelleVerbindungen === "1",

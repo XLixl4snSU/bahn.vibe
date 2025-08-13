@@ -33,6 +33,9 @@ interface PriceCalendarProps {
   searchParams: {
     klasse?: string
     maximaleUmstiege?: string
+    alter?: string
+    ermaessigungArt?: string
+    ermaessigungKlasse?: string
   }
 }
 

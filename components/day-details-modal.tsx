@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp } from "lucide-react"
+import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp, GraduationCap, User, Percent, Shuffle } from "lucide-react"
 
 interface IntervalData {
   preis: number
@@ -32,6 +32,9 @@ interface DayDetailsModalProps {
   searchParams: {
     klasse?: string
     maximaleUmstiege?: string
+    alter?: string
+    ermaessigungArt?: string
+    ermaessigungKlasse?: string
   }
   minPrice: number
   maxPrice: number
@@ -39,12 +42,43 @@ interface DayDetailsModalProps {
 
 const weekdays = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"]
 
+function getPersonCode(alter: string) {
+  switch (alter) {
+    case "ERWACHSENER": return "13"
+    case "KIND": return "11"
+    case "SENIOR": return "12"
+    case "JUGENDLICHER": return "9"
+    default: return "13"  // Default to ERWACHSENER if unknown
+  }
+}
+
+function getDiscountCode(ermaessigungArt: string, ermaessigungKlasse: string) {
+  if (ermaessigungArt === "BAHNCARD25" && ermaessigungKlasse === "KLASSE_1") return "17"
+  if (ermaessigungArt === "BAHNCARD25" && ermaessigungKlasse === "KLASSE_2") return "17"
+  if (ermaessigungArt === "BAHNCARD50" && ermaessigungKlasse === "KLASSE_1") return "23"
+  if (ermaessigungArt === "BAHNCARD50" && ermaessigungKlasse === "KLASSE_2") return "23"
+  if (ermaessigungArt === "KEINE_ERMAESSIGUNG") return "16"
+  return "0"
+}
+
+function getRParam(alter: string, ermaessigungArt: string, ermaessigungKlasse: string, klasse: string) {
+  // personCode
+  let personCode = getPersonCode(alter)
+  // discountCode
+  let discountCode = getDiscountCode(ermaessigungArt, ermaessigungKlasse)
+  // r-Param
+  return `${personCode}:${discountCode}:${klasse}:1`
+}
+
 function createBookingLink(
   abfahrtsZeitpunkt: string,
   startStationId: string,
   zielStationId: string,
   klasse: string,
   maximaleUmstiege: string,
+  alter: string,
+  ermaessigungArt: string,
+  ermaessigungKlasse: string,
 ): string {
   if (!abfahrtsZeitpunkt || !startStationId || !zielStationId) {
     return ""
@@ -54,7 +88,19 @@ function createBookingLink(
   const direktverbindung = maximaleUmstiege === "0" ? "true" : "false"
   const departureTime = encodeURIComponent(abfahrtsZeitpunkt)
 
-  return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&kl=${klasseParam}&hd=${departureTime}&soid=${encodeURIComponent(startStationId)}&zoid=${encodeURIComponent(zielStationId)}&bp=true&d=${direktverbindung}`
+  const rParam = getRParam(alter, ermaessigungArt, ermaessigungKlasse, klasse)
+
+  return `https://www.bahn.de/buchung/fahrplan/suche#sts=true&kl=${klasseParam}&r=${rParam}&hd=${departureTime}&soid=${encodeURIComponent(startStationId)}&zoid=${encodeURIComponent(zielStationId)}&bp=true&d=${direktverbindung}`
+}
+
+function getAlterLabel(alter: string | undefined) {
+  switch (alter) {
+    case "KIND": return "Kind (6–14 Jahre)"
+    case "JUGENDLICHER": return "Jugendlicher (15–26 Jahre)"
+    case "ERWACHSENER": return "Erwachsener (27–64 Jahre)"
+    case "SENIOR": return "Senior (ab 65 Jahre)"
+    default: return alter || "-"
+  }
 }
 
 export function DayDetailsModal({
@@ -127,9 +173,24 @@ export function DayDetailsModal({
               </div>
 
               <div className="text-sm text-gray-600">
-                <div>Klasse: {searchParams.klasse === "KLASSE_1" ? "1. Klasse" : "2. Klasse"}</div>
-                <div>Max. Umstiege: {searchParams.maximaleUmstiege || "0"}</div>
-                {hasMultipleIntervals && <div>Gefundene Verbindungen: {intervals.length}</div>}
+                <div className="flex flex-wrap gap-4 items-center text-sm text-gray-600 mt-2">
+                  <div className="flex items-center gap-1">
+                    <User className="w-4 h-4" />
+                    <span>{getAlterLabel(searchParams.alter)}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Train className="w-4 h-4" />
+                    <span>{searchParams.klasse === "KLASSE_1" ? "1. Klasse" : "2. Klasse"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Percent className="w-4 h-4" />
+                    <span>{searchParams.ermaessigungArt === "KEINE_ERMAESSIGUNG" ? "Keine Ermäßigung" : `${searchParams.ermaessigungArt === "BAHNCARD25" ? "BahnCard 25" : searchParams.ermaessigungArt === "BAHNCARD50" ? "BahnCard 50" : searchParams.ermaessigungArt}, ${searchParams.ermaessigungKlasse === "KLASSE_1" ? "1. Klasse" : "2. Klasse"}`}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Shuffle className="w-4 h-4" />
+                    <span>Max. Umstiege: {searchParams.maximaleUmstiege || "0"}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -152,6 +213,9 @@ export function DayDetailsModal({
                           zielStation.id,
                           searchParams.klasse || "KLASSE_2",
                           searchParams.maximaleUmstiege || "0",
+                          searchParams.alter || "ERWACHSENER",
+                          searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG",
+                          searchParams.ermaessigungKlasse || "KLASSENLOS",
                         )
                       : null
 
@@ -282,6 +346,9 @@ export function DayDetailsModal({
                     zielStation.id,
                     searchParams.klasse || "KLASSE_2",
                     searchParams.maximaleUmstiege || "0",
+                    searchParams.alter || "ERWACHSENER",
+                    searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG",
+                    searchParams.ermaessigungKlasse || "KLASSENLOS",
                   )
                   if (bookingLink) {
                     window.open(bookingLink, "_blank")

@@ -8,11 +8,14 @@ interface SearchParams {
   start?: string
   ziel?: string
   abfahrtab?: string
+  alter?: string
   klasse?: string
   schnelleVerbindungen?: string
   nurDeutschlandTicketVerbindungen?: string
   maximaleUmstiege?: string
   dayLimit?: string
+  ermaessigungArt?: string
+  ermaessigungKlasse?: string
 }
 
 interface TrainResultsProps {
@@ -46,6 +49,9 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
     start: searchParams.start,
     ziel: searchParams.ziel,
     abfahrtab: searchParams.abfahrtab,
+    ermaessigungArt: searchParams.ermaessigungArt,
+    ermaessigungKlasse: searchParams.ermaessigungKlasse,
+    alter: searchParams.alter,
     klasse: searchParams.klasse,
     schnelleVerbindungen: searchParams.schnelleVerbindungen,
     nurDeutschlandTicketVerbindungen: searchParams.nurDeutschlandTicketVerbindungen,
@@ -81,6 +87,9 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
             start: searchParams.start,
             ziel: searchParams.ziel,
             abfahrtab: searchParams.abfahrtab || new Date().toISOString().split("T")[0],
+            alter: searchParams.alter || "ERWACHSENER",
+            ermaessigungArt: searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG",
+            ermaessigungKlasse: searchParams.ermaessigungKlasse || "KLASSENLOS",
             klasse: searchParams.klasse || "KLASSE_2",
             schnelleVerbindungen: searchParams.schnelleVerbindungen === "1",
             nurDeutschlandTicketVerbindungen: searchParams.nurDeutschlandTicketVerbindungen === "1",
@@ -115,11 +124,14 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
     searchParams.start,
     searchParams.ziel,
     searchParams.abfahrtab,
+    searchParams.alter,
     searchParams.klasse,
     searchParams.schnelleVerbindungen,
     searchParams.nurDeutschlandTicketVerbindungen,
     searchParams.maximaleUmstiege,
     searchParams.dayLimit,
+    searchParams.ermaessigungArt,
+    searchParams.ermaessigungKlasse,
   ])
 
   // Show nothing if no search params
@@ -240,6 +252,9 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
               searchParams={{
                 klasse: searchParams.klasse,
                 maximaleUmstiege: searchParams.maximaleUmstiege,
+                alter: searchParams.alter,
+                ermaessigungArt: searchParams.ermaessigungArt,
+                ermaessigungKlasse: searchParams.ermaessigungKlasse,
               }}
           />
         </div>
