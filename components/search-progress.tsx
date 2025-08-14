@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Progress } from "./ui/progress"
 
 interface SearchProgressProps {
@@ -28,6 +28,22 @@ export function SearchProgress({ sessionId, searchParams }: SearchProgressProps)
     estimatedTimeRemaining: 0,
     currentDate: ""
   })
+
+  // Zeitmessung für vergangene Zeit
+  const [elapsed, setElapsed] = useState(0)
+  const startTimeRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!sessionId) return
+    startTimeRef.current = Date.now()
+    setElapsed(0)
+    const interval = setInterval(() => {
+      if (startTimeRef.current) {
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [sessionId])
 
   useEffect(() => {
     if (!sessionId) return
@@ -62,6 +78,8 @@ export function SearchProgress({ sessionId, searchParams }: SearchProgressProps)
     ? Math.round((progress.currentDay / progress.totalDays) * 100) 
     : 0
 
+  const displayProgress = progress.isComplete ? 100 : progressPercentage
+
   const formatTime = (seconds: number) => {
     if (seconds < 60) return `${seconds}s`
     const minutes = Math.floor(seconds / 60)
@@ -81,23 +99,24 @@ export function SearchProgress({ sessionId, searchParams }: SearchProgressProps)
             </p>
           </div>
         </div>
-        
         <div className="space-y-3">
           {/* Progress Bar */}
           <div className="space-y-2">
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Tag {progress.currentDay} von {progress.totalDays}</span>
+              <span>
+                Tag {progress.currentDay} von {progress.totalDays}
+                {progress.currentDate && (
+                  <> ({new Date(progress.currentDate).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })})</>
+                )}
+              </span>
               <span>{progressPercentage}%</span>
             </div>
-            <Progress value={progressPercentage} className="h-2" />
+            <Progress value={displayProgress} className="h-2" />
           </div>
-          
           {/* Current Status */}
           <div className="flex justify-between items-center text-sm">
             <div className="text-gray-600">
-              {progress.currentDate && (
-                <span>Aktuell: {new Date(progress.currentDate).toLocaleDateString('de-DE')}</span>
-              )}
+              <span>{progress.isComplete ? `Gesamtdauer: ${formatTime(elapsed)}` : `Vergangene Zeit: ${formatTime(elapsed)}`}</span>
             </div>
             <div className="text-blue-600 font-medium">
               {progress.estimatedTimeRemaining > 0 && !progress.isComplete && (

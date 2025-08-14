@@ -146,6 +146,7 @@ interface TrainResult {
     abfahrtsOrt: string
     ankunftsOrt: string
     info: string
+    umstiegsAnzahl: number
   }>
 }
 
@@ -405,6 +406,7 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
       abfahrtsOrt: string
       ankunftsOrt: string
       info: string
+      umstiegsAnzahl: number
     }> = []
 
     // Process ALL intervals (für Cache)
@@ -415,10 +417,14 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
         newPreis = iv.preis.betrag
 
         if (iv.verbindungen && iv.verbindungen[0] && iv.verbindungen[0].verbindung) {
-          const connection = iv.verbindungen[0].verbindung.verbindungsAbschnitte[0]
+          const verbindungsAbschnitte = iv.verbindungen[0].verbindung.verbindungsAbschnitte
+          
+          if (verbindungsAbschnitte && verbindungsAbschnitte.length > 0) {
+            // Erste Abfahrt und letzte Ankunft für korrekte Start/Ziel-Anzeige
+            const firstConnection = verbindungsAbschnitte[0]
+            const lastConnection = verbindungsAbschnitte[verbindungsAbschnitte.length - 1]
 
-          if (connection) {
-            const abfahrt = new Date(connection.abfahrtsZeitpunkt).toLocaleString("de-DE", {
+            const abfahrt = new Date(firstConnection.abfahrtsZeitpunkt).toLocaleString("de-DE", {
               day: "2-digit",
               month: "2-digit",
               year: "numeric",
@@ -427,7 +433,7 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
               second: "2-digit",
             })
 
-            const ankunft = new Date(connection.ankunftsZeitpunkt).toLocaleString("de-DE", {
+            const ankunft = new Date(lastConnection.ankunftsZeitpunkt).toLocaleString("de-DE", {
               day: "2-digit",
               month: "2-digit",
               year: "numeric",
@@ -436,16 +442,17 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
               second: "2-digit",
             })
 
-            const info = `${abfahrt} ${connection.abfahrtsOrt} -> ${ankunft} ${connection.ankunftsOrt}`
+            const info = `${abfahrt} ${firstConnection.abfahrtsOrt} -> ${ankunft} ${lastConnection.ankunftsOrt}`
 
             // Store ALL intervals for cache
             allIntervalsForCache.push({
               preis: newPreis,
-              abfahrtsZeitpunkt: connection.abfahrtsZeitpunkt,
-              ankunftsZeitpunkt: connection.ankunftsZeitpunkt,
-              abfahrtsOrt: connection.abfahrtsOrt,
-              ankunftsOrt: connection.ankunftsOrt,
+              abfahrtsZeitpunkt: firstConnection.abfahrtsZeitpunkt,
+              ankunftsZeitpunkt: lastConnection.ankunftsZeitpunkt,
+              abfahrtsOrt: firstConnection.abfahrtsOrt,
+              ankunftsOrt: lastConnection.ankunftsOrt,
               info: info,
+              umstiegsAnzahl: iv.verbindungen[0].verbindung.umstiegsAnzahl || 0,
             })
           }
         }
@@ -490,6 +497,7 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
       abfahrtsOrt: string
       ankunftsOrt: string
       info: string
+      umstiegsAnzahl: number
     }> = []
     let bestConnection: any = null
 
@@ -501,10 +509,14 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
         newPreis = iv.preis.betrag
 
         if (iv.verbindungen && iv.verbindungen[0] && iv.verbindungen[0].verbindung) {
-          const connection = iv.verbindungen[0].verbindung.verbindungsAbschnitte[0]
+          const verbindungsAbschnitte = iv.verbindungen[0].verbindung.verbindungsAbschnitte
+          
+          if (verbindungsAbschnitte && verbindungsAbschnitte.length > 0) {
+            // Erste Abfahrt und letzte Ankunft für korrekte Start/Ziel-Anzeige
+            const firstConnection = verbindungsAbschnitte[0]
+            const lastConnection = verbindungsAbschnitte[verbindungsAbschnitte.length - 1]
 
-          if (connection) {
-            const abfahrt = new Date(connection.abfahrtsZeitpunkt).toLocaleString("de-DE", {
+            const abfahrt = new Date(firstConnection.abfahrtsZeitpunkt).toLocaleString("de-DE", {
               day: "2-digit",
               month: "2-digit",
               year: "numeric",
@@ -513,7 +525,7 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
               second: "2-digit",
             })
 
-            const ankunft = new Date(connection.ankunftsZeitpunkt).toLocaleString("de-DE", {
+            const ankunft = new Date(lastConnection.ankunftsZeitpunkt).toLocaleString("de-DE", {
               day: "2-digit",
               month: "2-digit",
               year: "numeric",
@@ -522,24 +534,26 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
               second: "2-digit",
             })
 
-            const info = `${abfahrt} ${connection.abfahrtsOrt} -> ${ankunft} ${connection.ankunftsOrt}`
+            const info = `${abfahrt} ${firstConnection.abfahrtsOrt} -> ${ankunft} ${lastConnection.ankunftsOrt}`
             preise[info + newPreis] = newPreis
 
             // Store all intervals for detailed view
             allIntervals.push({
               preis: newPreis,
-              abfahrtsZeitpunkt: connection.abfahrtsZeitpunkt,
-              ankunftsZeitpunkt: connection.ankunftsZeitpunkt,
-              abfahrtsOrt: connection.abfahrtsOrt,
-              ankunftsOrt: connection.ankunftsOrt,
+              abfahrtsZeitpunkt: firstConnection.abfahrtsZeitpunkt,
+              ankunftsZeitpunkt: lastConnection.ankunftsZeitpunkt,
+              abfahrtsOrt: firstConnection.abfahrtsOrt,
+              ankunftsOrt: lastConnection.ankunftsOrt,
               info: info,
+              umstiegsAnzahl: iv.verbindungen[0].verbindung.umstiegsAnzahl || 0,
             })
 
             // Store the connection for the cheapest price
             if (!bestConnection || newPreis < bestConnection.preis) {
               bestConnection = {
                 preis: newPreis,
-                connection: connection,
+                connection: firstConnection, // Use first connection for departure time
+                ankunftsZeitpunkt: lastConnection.ankunftsZeitpunkt, // But last connection for arrival time
                 info: info,
               }
             }

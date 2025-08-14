@@ -221,7 +221,7 @@ export function PriceCalendar({ results, onDayClick, startStation, zielStation, 
                 <div
                   key={dateKey}
                   className={`
-                    relative min-h-[80px] p-2 border rounded-lg transition-all hover:shadow-sm
+                    relative min-h-[64px] sm:min-h-[80px] p-1 sm:p-2 border rounded-lg transition-all hover:shadow-sm
                     ${!isCurrentMonth ? "opacity-30" : ""}
                     ${isToday ? "ring-2 ring-blue-500" : ""}
                     ${hasPrice ? getPriceBg(priceData.preis) : hasResult ? "bg-gray-50" : "bg-white"}
@@ -229,30 +229,37 @@ export function PriceCalendar({ results, onDayClick, startStation, zielStation, 
                   `}
                   onClick={() => hasPrice && handleDayClick(dateKey, priceData)}
                 >
-                  {/* Day Number */}
-                  <div className="text-sm font-medium text-gray-900 mb-1">{day.getDate()}</div>
+                  {/* Day Number und Multiple options indicator */}
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-xs sm:text-sm font-medium text-gray-900">{day.getDate()}</div>
+                    {hasMultipleOptions && (
+                      <span className="text-[10px] sm:text-xs bg-blue-100 text-blue-600 px-1 rounded ml-1">{priceData.allIntervals!.length}</span>
+                    )}
+                  </div>
 
                   {/* Price nur anzeigen, wenn Ergebnis vorhanden */}
                   {hasResult && (
-                    <div className="space-y-1">
-                      <div className={`text-sm font-bold ${getPriceColor(priceData.preis)}`}>
-                        {priceData.preis > 0 ? `${priceData.preis}€` : ""}
-                      </div>
-
-                      {/* Price indicators */}
-                      {priceData.preis > 0 && (
-                        <div className="text-xs">
-                          {priceData.preis === minPrice && <span>🏆</span>}
-                          {priceData.preis === maxPrice && <span>💸</span>}
-                          {hasMultipleOptions && (
-                            <span className="text-blue-600">+{priceData.allIntervals!.length - 1}</span>
+                    <div className="space-y-1 flex flex-col h-full justify-between pb-5">
+                      <div>
+                        <div className={`text-xs sm:text-sm font-bold ${getPriceColor(priceData.preis)}`}> 
+                          {priceData.preis > 0 && (
+                            <>
+                              <span className="block sm:hidden">{Math.round(priceData.preis)}€</span>
+                              <span className="hidden sm:block">{priceData.preis}€</span>
+                            </>
                           )}
                         </div>
-                      )}
-
-                      {/* Departure time */}
+                        {/* Price indicators */}
+                        {priceData.preis > 0 && (
+                          <div className="text-[10px] sm:text-xs">
+                            {priceData.preis === minPrice && <span>🏆</span>}
+                            {priceData.preis === maxPrice && <span>💸</span>}
+                          </div>
+                        )}
+                      </div>
+                      {/* Departure time immer unten, absolut positioniert */}
                       {priceData.preis > 0 && priceData.abfahrtsZeitpunkt && (
-                        <div className="text-xs text-gray-500">
+                        <div className="absolute left-1 right-1 bottom-1 text-[10px] sm:text-xs text-gray-500 text-right pointer-events-none">
                           {new Date(priceData.abfahrtsZeitpunkt).toLocaleTimeString("de-DE", {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -262,19 +269,11 @@ export function PriceCalendar({ results, onDayClick, startStation, zielStation, 
                     </div>
                   )}
 
-                  {/* Click indicator for bookable days */}
-                  {hasPrice && (
-                    <div className="absolute top-1 right-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                    </div>
-                  )}
-
-                  {/* Multiple options indicator */}
-                  {hasMultipleOptions && (
-                    <div className="absolute bottom-1 left-1">
-                      <div className="text-xs bg-blue-100 text-blue-600 px-1 rounded">
-                        {priceData.allIntervals!.length}
-                      </div>
+                  {/* Click indicator for bookable days entfernt */}
+                  {/* Indikator für Tage ohne Fahrten: nur für geprüfte Tage */}
+                  {hasResult && priceData?.preis === 0 && (
+                    <div className="absolute bottom-1 right-1">
+                      <span className="text-gray-400 text-xs select-none">❌</span>
                     </div>
                   )}
                 </div>

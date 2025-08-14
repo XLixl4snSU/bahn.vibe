@@ -3,7 +3,17 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp, GraduationCap, User, Percent, Shuffle } from "lucide-react"
+import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp, GraduationCap, User, Percent, Shuffle, Clock } from "lucide-react"
+
+interface Interval {
+  preis: number
+  abfahrtsZeitpunkt: string
+  ankunftsZeitpunkt: string
+  abfahrtsOrt: string
+  ankunftsOrt: string
+  info: string
+  umstiegsAnzahl?: number
+}
 
 interface IntervalData {
   preis: number
@@ -183,6 +193,20 @@ export function DayDetailsModal({
                     <span>Max. Umstiege: {searchParams.maximaleUmstiege || "0"}</span>
                   </div>
                 </div>
+                <div className="flex flex-wrap gap-4 items-center text-sm text-gray-600 mt-2">
+                  {searchParams.abfahrtAb && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>Abfahrt ab: {searchParams.abfahrtAb} Uhr</span>
+                    </div>
+                  )}
+                  {searchParams.ankunftBis && (
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-4 h-4" />
+                      <span>Ankunft bis: {searchParams.ankunftBis} Uhr</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -241,7 +265,7 @@ export function DayDetailsModal({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                         <div>
                           <div className="text-gray-600 mb-1">Abfahrt</div>
                           <div className="font-medium">
@@ -265,11 +289,23 @@ export function DayDetailsModal({
                         </div>
 
                         <div>
+                          <div className="text-gray-600 mb-1">Umstiege</div>
+                          <div className="font-medium flex items-center gap-1">
+                            <Shuffle className="h-4 w-4 text-gray-500" />
+                            {interval.umstiegsAnzahl || 0}
+                            {(interval.umstiegsAnzahl || 0) === 0 && (
+                              <span className="text-xs text-green-600 -1">(Direkt)</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
                           <div className="text-gray-600 mb-1">Reisedauer</div>
                           <div className="font-medium">
                             {calculateDuration(interval.abfahrtsZeitpunkt, interval.ankunftsZeitpunkt)}
                           </div>
                         </div>
+
                       </div>
                     </div>
                   )

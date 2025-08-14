@@ -39,7 +39,9 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
   const [ermaessigungArt, setErmaessigungArt] = useState(searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG")
   const [ermaessigungKlasse, setErmaessigungKlasse] = useState(searchParams.ermaessigungKlasse || "KLASSENLOS")
   const [klasse, setKlasse] = useState(searchParams.klasse || "KLASSE_2")
-  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(searchParams.schnelleVerbindungen === "1")
+  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(
+    searchParams.schnelleVerbindungen === undefined || searchParams.schnelleVerbindungen === "1"
+  )
   const [nurDeutschlandTicket, setNurDeutschlandTicket] = useState(
     searchParams.nurDeutschlandTicketVerbindungen === "1",
   )
@@ -173,8 +175,8 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
         {/* Abschnitt 1: Reisedaten */}
         <div>
           <h3 className="text-base font-semibold text-gray-700 mb-2">Reisedaten</h3>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-end">
+            <div>
               <Label htmlFor="start">
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="w-4 h-4 text-black" />
@@ -190,10 +192,18 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 required
               />
             </div>
-            <Button type="button" variant="outline" size="icon" onClick={switchStations} className="mt-6 bg-transparent">
-              <ArrowLeftRight className="h-4 w-4" />
-            </Button>
-            <div className="flex-1">
+            <div className="flex flex-col items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={switchStations}
+                className="bg-transparent mt-[30px]"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <div>
               <Label htmlFor="ziel">
                 <span className="inline-flex items-center gap-1">
                   <MapPin className="w-4 h-4 text-black" />
@@ -210,17 +220,17 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
               />
             </div>
           </div>
-          <div className="flex flex-row flex-wrap gap-4 mt-2">
-            <div className="min-w-[140px] flex-1">
+          <div className="flex flex-row flex-wrap gap-4 mt-2 items-end">
+            <div className="min-w-[140px] flex-1 flex flex-col justify-end">
               <Label htmlFor="reisezeitraumAb">
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="w-4 h-4 text-black" />
                   Reisezeitraum ab
                 </span>
               </Label>
-              <Input id="reisezeitraumAb" type="date" value={reisezeitraumAb} onChange={handleReisezeitraumAbChange} className="mt-1" />
+              <Input id="reisezeitraumAb" type="date" value={reisezeitraumAb} onChange={handleReisezeitraumAbChange} className="mt-1 h-10" />
             </div>
-            <div className="min-w-[140px] flex-1">
+            <div className="min-w-[140px] flex-1 flex flex-col justify-end">
               <Label htmlFor="reisezeitraumBis">
                 <span className="inline-flex items-center gap-1">
                   <CalendarCheck className="w-4 h-4 text-black" />
@@ -238,7 +248,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 })()}
                 value={reisezeitraumBis}
                 onChange={e => setReisezeitraumBis(e.target.value)}
-                className="mt-1"
+                className="mt-1 h-10"
               />
             </div>
           </div>
@@ -279,8 +289,8 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
 
         <div className="border-t border-gray-200 pt-6">
           <h3 className="text-base font-semibold text-gray-700 mb-2">Reisende & Ermäßigung</h3>
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+          <div className="flex flex-row gap-4 flex-wrap md:flex-nowrap">
+            <div className="flex-1 min-w-0">
               <Label>
                 <span className="inline-flex items-center gap-1">
                   <User className="w-4 h-4 text-black" />
@@ -288,7 +298,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 </span>
               </Label>
               <Select value={alter} onValueChange={setAlter}>
-                <SelectTrigger className="mt-2 w-64">
+                <SelectTrigger className="mt-2 w-full">
                   <SelectValue placeholder="Alter wählen" />
                 </SelectTrigger>
                 <SelectContent>
@@ -299,7 +309,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <Label>
                 <span className="inline-flex items-center gap-1">
                   <Percent className="w-4 h-4 text-black" />
@@ -316,7 +326,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                   } catch {}
                 }}
               >
-                <SelectTrigger className="mt-2 w-64">
+                <SelectTrigger className="mt-2 w-full">
                   <SelectValue placeholder="Ermäßigung wählen" />
                 </SelectTrigger>
                 <SelectContent>
