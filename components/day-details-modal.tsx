@@ -25,19 +25,11 @@ interface PriceData {
 interface DayDetailsModalProps {
   isOpen: boolean
   onClose: () => void
-  date: string
-  priceData: PriceData | null
+  date: string | null
+  data: PriceData | null
   startStation?: { name: string; id: string }
   zielStation?: { name: string; id: string }
-  searchParams: {
-    klasse?: string
-    maximaleUmstiege?: string
-    alter?: string
-    ermaessigungArt?: string
-    ermaessigungKlasse?: string
-  }
-  minPrice: number
-  maxPrice: number
+  searchParams?: any
 }
 
 const weekdays = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"]
@@ -107,19 +99,14 @@ export function DayDetailsModal({
   isOpen,
   onClose,
   date,
-  priceData,
+  data,
   startStation,
   zielStation,
   searchParams,
-  minPrice,
-  maxPrice,
 }: DayDetailsModalProps) {
-  if (!priceData) return null
+  if (!date || !data) return null
 
   const dateObj = new Date(date)
-  const dayOfWeek = weekdays[dateObj.getDay()]
-  const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6
-
   const formattedDate = dateObj.toLocaleDateString("de-DE", {
     weekday: "long",
     year: "numeric",
@@ -127,7 +114,12 @@ export function DayDetailsModal({
     day: "numeric",
   })
 
-  const intervals = priceData.allIntervals || []
+  const intervals = data.allIntervals || []
+
+  // Check if this is a weekend
+  const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6
+  
+  // Check if there are multiple intervals
   const hasMultipleIntervals = intervals.length > 1
 
   const calculateDuration = (departure: string, arrival: string) => {
@@ -169,7 +161,7 @@ export function DayDetailsModal({
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <Euro className="h-5 w-5 text-green-600" />
-                <span className="text-3xl font-bold text-green-600">{priceData.preis}€</span>
+                <span className="text-3xl font-bold text-green-600">{data.preis}€</span>
               </div>
 
               <div className="text-sm text-gray-600">
@@ -204,7 +196,7 @@ export function DayDetailsModal({
               </h3>
 
               <div className="space-y-3 overflow-y-auto">
-                {intervals.map((interval, index) => {
+                {intervals.map((interval: any, index: number) => {
                   const bookingLink =
                     startStation && zielStation
                       ? createBookingLink(
@@ -223,7 +215,7 @@ export function DayDetailsModal({
                     <div
                       key={index}
                       className={`p-3 rounded border-l-4 ${
-                        interval.preis === priceData.preis ? "border-green-500 bg-green-50" : "border-gray-300 bg-white"
+                        interval.preis === data.preis ? "border-green-500 bg-green-50" : "border-gray-300 bg-white"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -233,7 +225,7 @@ export function DayDetailsModal({
                           >
                             {interval.preis}€
                           </span>
-                          {interval.preis === priceData.preis && (
+                          {interval.preis === data.preis && (
                             <Badge className="bg-green-100 text-green-800">Bestpreis</Badge>
                           )}
                         </div>
@@ -319,17 +311,17 @@ export function DayDetailsModal({
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Günstigste Verbindung</div>
-                  <div className="font-bold text-green-600">{Math.min(...intervals.map((i) => i.preis))}€</div>
+                  <div className="font-bold text-green-600">{Math.min(...intervals.map((i: any) => i.preis))}€</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Durchschnitt</div>
                   <div className="font-bold text-blue-600">
-                    {Math.round(intervals.reduce((sum, i) => sum + i.preis, 0) / intervals.length)}€
+                    {Math.round(intervals.reduce((sum: number, i: any) => sum + i.preis, 0) / intervals.length)}€
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Teuerste Verbindung</div>
-                  <div className="font-bold text-red-600">{Math.max(...intervals.map((i) => i.preis))}€</div>
+                  <div className="font-bold text-red-600">{Math.max(...intervals.map((i: any) => i.preis))}€</div>
                 </div>
               </div>
             </div>
@@ -337,11 +329,11 @@ export function DayDetailsModal({
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4">
-            {priceData.abfahrtsZeitpunkt && startStation && zielStation && (
+            {data.abfahrtsZeitpunkt && startStation && zielStation && (
               <Button
                 onClick={() => {
                   const bookingLink = createBookingLink(
-                    priceData.abfahrtsZeitpunkt,
+                    data.abfahrtsZeitpunkt,
                     startStation.id,
                     zielStation.id,
                     searchParams.klasse || "KLASSE_2",
@@ -357,7 +349,7 @@ export function DayDetailsModal({
                 className="flex-1 bg-green-600 hover:bg-green-700"
               >
                 <Train className="h-4 w-4 mr-2" />
-                Bestpreis buchen ({priceData.preis}€)
+                Bestpreis buchen ({data.preis}€)
               </Button>
             )}
 

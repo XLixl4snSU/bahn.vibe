@@ -3,19 +3,24 @@
 import { useState, useEffect } from "react"
 import { PriceCalendar } from "./price-calendar"
 import { LoadingSpinner } from "./loading-spinner"
+import { DayDetailsModal } from "./day-details-modal"
+import { SearchProgress } from "./search-progress"
 
 interface SearchParams {
   start?: string
   ziel?: string
-  abfahrtab?: string
+  reisezeitraumAb?: string
+  reisezeitraumBis?: string
   alter?: string
+  ermaessigungArt?: string
+  ermaessigungKlasse?: string
   klasse?: string
   schnelleVerbindungen?: string
   nurDeutschlandTicketVerbindungen?: string
   maximaleUmstiege?: string
   dayLimit?: string
-  ermaessigungArt?: string
-  ermaessigungKlasse?: string
+  abfahrtAb?: string
+  ankunftBis?: string
 }
 
 interface TrainResultsProps {
@@ -29,26 +34,55 @@ interface PriceData {
   ankunftsZeitpunkt: string
 }
 
-interface SearchResults {
-  [date: string]: PriceData
-  _meta?: {
-    startStation: { name: string; id: string }
-    zielStation: { name: string; id: string }
+interface MetaData {
+  startStation: { name: string; id: string }
+  zielStation: { name: string; id: string }
+  sessionId?: string
+  searchParams?: {
+    klasse?: string
+    maximaleUmstiege?: string
+    schnelleVerbindungen?: string | boolean
+    nurDeutschlandTicketVerbindungen?: string | boolean
+    abfahrtAb?: string
+    ankunftBis?: string
   }
 }
 
+interface PriceResults {
+  [date: string]: PriceData
+}
+
 export function TrainResults({ searchParams }: TrainResultsProps) {
-  const [results, setResults] = useState<SearchResults | null>(null)
+  const [priceResults, setPriceResults] = useState<PriceResults>({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [executionTime, setExecutionTime] = useState<number>(0)
-  const [lastSearchKey, setLastSearchKey] = useState<string>("")
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedData, setSelectedData] = useState<PriceData | null>(null)
+
+  // Generate sessionId when search starts
+  const generateSessionId = () => {
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID()
+    }
+    // Fallback für ältere Browser
+    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0
+      const v = c === 'x' ? r : (r & 0x3 | 0x8)
+      return v.toString(16)
+    })
+  }
+
+  const validPriceResults = Object.entries(priceResults).filter(([key]) => key !== "_meta") as [string, PriceData][]
+  const _meta = (priceResults as any)._meta as MetaData | undefined
+  const startStation = _meta?.startStation
+  const zielStation = _meta?.zielStation
 
   // Create a unique key for the current search to prevent duplicate requests
   const currentSearchKey = JSON.stringify({
     start: searchParams.start,
     ziel: searchParams.ziel,
-    abfahrtab: searchParams.abfahrtab,
+    reisezeitraumAb: searchParams.reisezeitraumAb,
+    reisezeitraumBis: searchParams.reisezeitraumBis,
     ermaessigungArt: searchParams.ermaessigungArt,
     ermaessigungKlasse: searchParams.ermaessigungKlasse,
     alter: searchParams.alter,
@@ -61,32 +95,30 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
 
   useEffect(() => {
     // Only search if we have required params and this is a new search
-    if (!searchParams.start || !searchParams.ziel || currentSearchKey === lastSearchKey) {
+    if (!searchParams.start || !searchParams.ziel || currentSearchKey === "") {
       return
     }
 
     const searchPrices = async () => {
       setLoading(true)
-      setError(null)
-      setResults(null)
-
-      const startTime = Date.now()
+      setPriceResults({})
+      
+      // Generiere sessionId sofort im Frontend
+      const newSessionId = generateSessionId()
+      setSessionId(newSessionId)
 
       try {
-        // Get the base URL for API calls
-        const baseUrl =
-            process.env.NEXT_PUBLIC_BASE_URL ||
-            (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000")
-
-        const response = await fetch(`${baseUrl}/api/search-prices`, {
+        const response = await fetch("/api/search-prices", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            sessionId: newSessionId,
             start: searchParams.start,
             ziel: searchParams.ziel,
-            abfahrtab: searchParams.abfahrtab || new Date().toISOString().split("T")[0],
+            reisezeitraumAb: searchParams.reisezeitraumAb || new Date().toISOString().split("T")[0],
+            reisezeitraumBis: searchParams.reisezeitraumBis,
             alter: searchParams.alter || "ERWACHSENER",
             ermaessigungArt: searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG",
             ermaessigungKlasse: searchParams.ermaessigungKlasse || "KLASSENLOS",
@@ -95,6 +127,8 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
             nurDeutschlandTicketVerbindungen: searchParams.nurDeutschlandTicketVerbindungen === "1",
             maximaleUmstiege: Number.parseInt(searchParams.maximaleUmstiege || "0"),
             dayLimit: Number.parseInt(searchParams.dayLimit || "3"),
+            abfahrtAb: searchParams.abfahrtAb,
+            ankunftBis: searchParams.ankunftBis,
           }),
         })
 
@@ -104,26 +138,23 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
         }
 
         const data = await response.json()
-        const endTime = Date.now()
-
-        setResults(data)
-        setExecutionTime(Math.round((endTime - startTime) / 1000))
-        setLastSearchKey(currentSearchKey) // Mark this search as completed
+        setPriceResults(data)
+        setSelectedDay(null)
       } catch (err) {
         console.error("Error in bestpreissuche:", err)
-        setError(err instanceof Error ? err.message : "Unbekannter Fehler")
       } finally {
         setLoading(false)
+        setSessionId(null)
       }
     }
 
     searchPrices()
   }, [
     currentSearchKey,
-    lastSearchKey,
     searchParams.start,
     searchParams.ziel,
-    searchParams.abfahrtab,
+    searchParams.reisezeitraumAb,
+    searchParams.reisezeitraumBis,
     searchParams.alter,
     searchParams.klasse,
     searchParams.schnelleVerbindungen,
@@ -142,52 +173,19 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
   // Show loading state
   if (loading) {
     return (
-        <div className="space-y-4">
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <h3 className="font-semibold text-blue-800 mb-2">🔍 Suche läuft...</h3>
-            <p className="text-sm text-blue-600">
-              Durchsuche {searchParams.dayLimit || "3"} Tage für die beste Preise zwischen {searchParams.start} und{" "}
-              {searchParams.ziel}
-            </p>
-          </div>
-          <LoadingSpinner />
-        </div>
-    )
-  }
-
-  // Show error state
-  if (error) {
-    return (
-        <div className="text-center py-8">
-          <p className="text-red-600 font-bold">Fehler bei der Bestpreissuche - Backend not responding</p>
-          <p className="text-sm text-gray-600 mt-2">{error}</p>
-          <p className="text-sm text-gray-500 mt-2">
-            Bitte versuchen Sie es später erneut oder überprüfen Sie Ihre Internetverbindung.
-          </p>
-          <button
-              onClick={() => {
-                setLastSearchKey("") // Reset to allow retry
-                setError(null)
-              }}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Erneut versuchen
-          </button>
-        </div>
+      <SearchProgress 
+        sessionId={sessionId} 
+        searchParams={{
+          start: searchParams.start,
+          ziel: searchParams.ziel,
+          dayLimit: searchParams.dayLimit
+        }}
+      />
     )
   }
 
   // Show no results state
-  if (!results) {
-    return null
-  }
-
-  // Extract metadata and results
-  const { _meta, ...priceResults } = results
-  const startStation = _meta?.startStation
-  const zielStation = _meta?.zielStation
-
-  if (!priceResults || Object.keys(priceResults).length === 0) {
+  if (!validPriceResults || validPriceResults.length === 0) {
     return (
         <div className="text-center py-8">
           <p className="text-red-600 font-medium">Keine Bestpreise gefunden</p>
@@ -199,8 +197,8 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
   }
 
   // Find min and max prices for summary
-  const prices = Object.values(priceResults)
-      .map((r) => r.preis)
+  const prices = validPriceResults
+      .map(([, r]) => r.preis)
       .filter((p) => p > 0)
 
   if (prices.length === 0) {
@@ -221,7 +219,7 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
         {/* Quick Summary */}
         <div className="bg-blue-50 p-4 rounded-lg">
           <h3 className="font-semibold text-blue-800 mb-2">
-            📊 Preisübersicht ({Object.keys(priceResults).length} Tage)
+            📊 Preisübersicht ({validPriceResults.length} Tage)
           </h3>
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div className="text-center">
@@ -247,22 +245,29 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
           </h3>
           <PriceCalendar
               results={priceResults}
+              onDayClick={(date, data) => {
+                setSelectedDay(date)
+                setSelectedData(data)
+              }}
               startStation={startStation}
               zielStation={zielStation}
-              searchParams={{
-                klasse: searchParams.klasse,
-                maximaleUmstiege: searchParams.maximaleUmstiege,
-                alter: searchParams.alter,
-                ermaessigungArt: searchParams.ermaessigungArt,
-                ermaessigungKlasse: searchParams.ermaessigungKlasse,
-              }}
+              searchParams={searchParams}
           />
         </div>
 
-        {/* Processing Info */}
-        <div className="text-center p-3 bg-gray-100 rounded text-sm text-gray-600">
-          ✅ Bestpreissuche abgeschlossen in {executionTime}s • {Object.keys(priceResults).length} Tage durchsucht
-        </div>
+        {/* Day Details Modal */}
+        <DayDetailsModal
+            isOpen={!!selectedDay}
+            onClose={() => {
+              setSelectedDay(null)
+              setSelectedData(null)
+            }}
+            date={selectedDay}
+            data={selectedData}
+            startStation={startStation}
+            zielStation={zielStation}
+            searchParams={searchParams}
+        />
       </div>
   )
 }

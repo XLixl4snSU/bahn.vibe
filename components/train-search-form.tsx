@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React, { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,14 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue} from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeftRight } from "lucide-react"
-import { Train, User, Percent, Shuffle } from "lucide-react"
-import { useState } from "react"
+import { ArrowLeftRight, Train, User, Percent, Shuffle, ArrowRight, Ticket, Zap, MapPin, Calendar, CalendarCheck, Clock } from "lucide-react"
 
 interface SearchParams {
   start?: string
   ziel?: string
-  abfahrtab?: string
+  reisezeitraumAb?: string
   alter?: string
   ermaessigungArt?: string
   ermaessigungKlasse?: string
@@ -24,6 +22,9 @@ interface SearchParams {
   nurDeutschlandTicketVerbindungen?: string
   maximaleUmstiege?: string
   dayLimit?: string
+  reisezeitraumBis?: string
+  abfahrtAb?: string
+  ankunftBis?: string
 }
 
 interface TrainSearchFormProps {
@@ -33,24 +34,39 @@ interface TrainSearchFormProps {
 export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
   const [start, setStart] = useState(searchParams.start || "")
   const [ziel, setZiel] = useState(searchParams.ziel || "")
-  const [abfahrtab, setAbfahrtab] = useState(searchParams.abfahrtab || new Date().toISOString().split("T")[0])
+  const [reisezeitraumAb, setReisezeitraumAb] = useState(searchParams.reisezeitraumAb || new Date().toISOString().split("T")[0])
   const [alter, setAlter] = useState(searchParams.alter || "ERWACHSENER")
   const [ermaessigungArt, setErmaessigungArt] = useState(searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG")
   const [ermaessigungKlasse, setErmaessigungKlasse] = useState(searchParams.ermaessigungKlasse || "KLASSENLOS")
   const [klasse, setKlasse] = useState(searchParams.klasse || "KLASSE_2")
-  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(searchParams.schnelleVerbindungen === "1")
+  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(
+    searchParams.schnelleVerbindungen === undefined
+      ? true
+      : searchParams.schnelleVerbindungen === "1"
+  )
   const [nurDeutschlandTicket, setNurDeutschlandTicket] = useState(
     searchParams.nurDeutschlandTicketVerbindungen === "1",
   )
-  const [maximaleUmstiege, setMaximaleUmstiege] = useState(searchParams.maximaleUmstiege || "0")
+  const [abfahrtAb, setAbfahrtAb] = useState(searchParams.abfahrtAb || "")
+  const [ankunftBis, setAnkunftBis] = useState(searchParams.ankunftBis || "")
+  // Direktverbindungen-Checkbox initialisieren, wenn maximaleUmstiege 0 ist
+  const [nurDirektverbindungen, setNurDirektverbindungen] = useState(
+    searchParams.maximaleUmstiege === "0"
+  )
+  const [maximaleUmstiege, setMaximaleUmstiege] = useState(
+    searchParams.maximaleUmstiege !== undefined
+      ? searchParams.maximaleUmstiege
+      : "3"
+  )
   const [dayLimit, setDayLimit] = useState(searchParams.dayLimit || "3")
   const [reisezeitraumBis, setReisezeitraumBis] = useState(() => {
-    const ab = new Date(abfahrtab)
+    if (searchParams.reisezeitraumBis) return searchParams.reisezeitraumBis
+    const ab = new Date(reisezeitraumAb)
     ab.setDate(ab.getDate() + 2)
     return ab.toISOString().split("T")[0]
   })
 
-  const berechneteTage = Math.max(1, Math.min(30, Math.ceil((new Date(reisezeitraumBis).getTime() - new Date(abfahrtab).getTime()) / (1000*60*60*24) + 1)))
+  const berechneteTage = Math.max(1, Math.min(30, Math.ceil((new Date(reisezeitraumBis).getTime() - new Date(reisezeitraumAb).getTime()) / (1000*60*60*24) + 1)))
 
   const switchStations = () => {
     const temp = start
@@ -63,15 +79,24 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
     const params = new URLSearchParams()
     if (start) params.set("start", start)
     if (ziel) params.set("ziel", ziel)
-    if (abfahrtab) params.set("abfahrtab", abfahrtab)
+    if (reisezeitraumAb) params.set("reisezeitraumAb", reisezeitraumAb)
+    if (reisezeitraumBis) params.set("reisezeitraumBis", reisezeitraumBis)
     if (alter) params.set("alter", alter)
     params.set("ermaessigungArt", ermaessigungArt)
     params.set("ermaessigungKlasse", ermaessigungKlasse)
     params.set("klasse", klasse)
     if (schnelleVerbindungen) params.set("schnelleVerbindungen", "1")
     if (nurDeutschlandTicket) params.set("nurDeutschlandTicketVerbindungen", "1")
-    params.set("maximaleUmstiege", maximaleUmstiege)
-    params.set("dayLimit", (Math.max(1, Math.min(30, Math.ceil((new Date(reisezeitraumBis).getTime() - new Date(abfahrtab).getTime()) / (1000*60*60*24) + 1))).toString()))
+    if (abfahrtAb) params.set("abfahrtAb", abfahrtAb)
+    if (ankunftBis) params.set("ankunftBis", ankunftBis)
+    if (nurDirektverbindungen) {
+      params.set("maximaleUmstiege", "0")
+    } else {
+      params.set("maximaleUmstiege", maximaleUmstiege)
+    }
+    const diffTime = new Date(reisezeitraumBis).getTime() - new Date(reisezeitraumAb).getTime()
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1
+    params.set("dayLimit", Math.max(1, Math.min(30, diffDays)).toString())
 
     window.location.href = `/?${params.toString()}`
   }
@@ -79,21 +104,24 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
   const handleReset = () => {
     setStart("")
     setZiel("")
-    setAbfahrtab(new Date().toISOString().split("T")[0])
+    setReisezeitraumAb(new Date().toISOString().split("T")[0])
     setAlter("ERWACHSENER")
     setErmaessigungArt("KEINE_ERMAESSIGUNG")
     setErmaessigungKlasse("KLASSENLOS")
     setKlasse("KLASSE_2")
     setSchnelleVerbindungen(true)
     setNurDeutschlandTicket(false)
-    setMaximaleUmstiege("0")
+    setNurDirektverbindungen(false)
+    setMaximaleUmstiege("3")
     setDayLimit("3")
+    setAbfahrtAb("")
+    setAnkunftBis("")
     // URL bereinigen
     window.history.replaceState({}, document.title, window.location.pathname)
   }
 
-  const handleAbfahrtabChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAbfahrtab(e.target.value)
+  const handleReisezeitraumAbChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setReisezeitraumAb(e.target.value)
     // Bis-Datum ggf. anpassen
     const ab = new Date(e.target.value)
     const bis = new Date(reisezeitraumBis)
@@ -106,6 +134,41 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
     }
   }
 
+  // Wenn Direktverbindungen aktiviert werden, setze Umstiege auf 0, sonst auf letzten Wert > 0
+  const handleDirektverbindungenChange = (checked: boolean) => {
+    setNurDirektverbindungen(checked)
+    if (checked) {
+      setPrevUmstiege(maximaleUmstiege !== "0" ? maximaleUmstiege : prevUmstiege)
+      setMaximaleUmstiege("0")
+    } else {
+      setMaximaleUmstiege(prevUmstiege || "3")
+    }
+  }
+
+  // Wenn Nutzer das Feld ändert, Checkbox synchronisieren
+  const handleMaximaleUmstiegeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setMaximaleUmstiege(value)
+    if (value === "0") {
+      setNurDirektverbindungen(true)
+    } else {
+      setNurDirektverbindungen(false)
+      setPrevUmstiege(value)
+    }
+  }
+
+  // Wenn maximaleUmstiege sich ändert (z.B. durch URL-Params), Checkbox synchronisieren
+  React.useEffect(() => {
+    setNurDirektverbindungen(maximaleUmstiege === "0")
+  }, [maximaleUmstiege])
+
+  // Merke letzten Nutzerwert für Umstiege (außer 0)
+  const [prevUmstiege, setPrevUmstiege] = useState<string>(
+    searchParams.maximaleUmstiege && searchParams.maximaleUmstiege !== "0"
+      ? searchParams.maximaleUmstiege
+      : "3"
+  )
+
   return (
     <div className="bg-gray-50 p-6 rounded-lg">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Bestpreissuche</h2>
@@ -116,7 +179,12 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
           <h3 className="text-base font-semibold text-gray-700 mb-2">Reisedaten</h3>
           <div className="flex items-center gap-4">
             <div className="flex-1">
-              <Label htmlFor="start">Von (Startbahnhof)</Label>
+              <Label htmlFor="start">
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="w-4 h-4 text-black" />
+                  Von (Startbahnhof)
+                </span>
+              </Label>
               <Input
                 id="start"
                 type="text"
@@ -130,7 +198,12 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
               <ArrowLeftRight className="h-4 w-4" />
             </Button>
             <div className="flex-1">
-              <Label htmlFor="ziel">Nach (Zielbahnhof)</Label>
+              <Label htmlFor="ziel">
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="w-4 h-4 text-black" />
+                  Nach (Zielbahnhof)
+                </span>
+              </Label>
               <Input
                 id="ziel"
                 type="text"
@@ -143,23 +216,66 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
           </div>
           <div className="flex flex-row flex-wrap gap-4 mt-2">
             <div className="min-w-[140px] flex-1">
-              <Label htmlFor="abfahrtab">Reisezeitraum ab</Label>
-              <Input id="abfahrtab" type="date" value={abfahrtab} onChange={handleAbfahrtabChange} className="mt-1" />
+              <Label htmlFor="reisezeitraumAb">
+                <span className="inline-flex items-center gap-1">
+                  <Calendar className="w-4 h-4 text-black" />
+                  Reisezeitraum ab
+                </span>
+              </Label>
+              <Input id="reisezeitraumAb" type="date" value={reisezeitraumAb} onChange={handleReisezeitraumAbChange} className="mt-1" />
             </div>
             <div className="min-w-[140px] flex-1">
-              <Label htmlFor="reisezeitraumBis">Reisezeitraum bis (max. 30 Tage nach Start)</Label>
+              <Label htmlFor="reisezeitraumBis">
+                <span className="inline-flex items-center gap-1">
+                  <CalendarCheck className="w-4 h-4 text-black" />
+                  Reisezeitraum bis (max. 30 Tage nach Start)
+                </span>
+              </Label>
               <Input
                 id="reisezeitraumBis"
                 type="date"
-                min={abfahrtab}
+                min={reisezeitraumAb}
                 max={(() => {
-                  const ab = new Date(abfahrtab)
+                  const ab = new Date(reisezeitraumAb)
                   ab.setDate(ab.getDate() + 30)
                   return ab.toISOString().split("T")[0]
                 })()}
                 value={reisezeitraumBis}
                 onChange={e => setReisezeitraumBis(e.target.value)}
                 className="mt-1"
+              />
+            </div>
+          </div>
+          {/* Zeitfilter - Optional */}
+          <div className="flex flex-row flex-wrap gap-4 mt-4">
+            <div className="min-w-[140px] flex-1">
+              <Label htmlFor="abfahrtAb">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="w-4 h-4 text-black" />
+                  Abfahrt ab (optional)
+                </span>
+              </Label>
+              <Input 
+                id="abfahrtAb" 
+                type="time" 
+                value={abfahrtAb} 
+                onChange={(e) => setAbfahrtAb(e.target.value)} 
+                className="mt-1" 
+              />
+            </div>
+            <div className="min-w-[140px] flex-1">
+              <Label htmlFor="ankunftBis">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="w-4 h-4 text-black" />
+                  Ankunft bis (optional)
+                </span>
+              </Label>
+              <Input 
+                id="ankunftBis" 
+                type="time" 
+                value={ankunftBis} 
+                onChange={(e) => setAnkunftBis(e.target.value)} 
+                className="mt-1" 
               />
             </div>
           </div>
@@ -170,7 +286,10 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <Label>
-                <span className="inline-flex items-center gap-1"><User className="w-4 h-4" />Alter</span>
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-4 h-4 text-black" />
+                  Alter
+                </span>
               </Label>
               <Select value={alter} onValueChange={setAlter}>
                 <SelectTrigger className="mt-2 w-64">
@@ -186,7 +305,10 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
             </div>
             <div className="flex-1">
               <Label>
-                <span className="inline-flex items-center gap-1"><Percent className="w-4 h-4" />Ermäßigung</span>
+                <span className="inline-flex items-center gap-1">
+                  <Percent className="w-4 h-4 text-black" />
+                  Ermäßigung
+                </span>
               </Label>
               <Select
                 value={JSON.stringify({ art: ermaessigungArt, klasse: ermaessigungKlasse })}
@@ -223,7 +345,10 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
           </div>
           <div className="mt-4">
             <Label>
-              <span className="inline-flex items-center gap-1"><Train className="w-4 h-4" />Klasse</span>
+              <span className="inline-flex items-center gap-1">
+                <Train className="w-4 h-4 text-black" />
+                Klasse
+              </span>
             </Label>
             <RadioGroup value={klasse} onValueChange={setKlasse} className="flex gap-6 mt-2">
               <div className="flex items-center space-x-2">
@@ -247,7 +372,10 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 checked={schnelleVerbindungen}
                 onCheckedChange={checked => setSchnelleVerbindungen(checked === true)}
               />
-              <Label htmlFor="schnelle">Schnellste Verbindungen bevorzugen</Label>
+              <Label htmlFor="schnelle">
+                <Zap className="w-4 h-4 mr-1 inline-block text-black" />
+                Schnellste Verbindungen bevorzugen
+              </Label>
             </div>
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -255,22 +383,36 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
                 checked={nurDeutschlandTicket}
                 onCheckedChange={checked => setNurDeutschlandTicket(checked === true)}
               />
-              <Label htmlFor="deutschland">Nur Deutschland-Ticket-Verbindungen</Label>
+              <Label htmlFor="deutschland">
+                <Ticket className="w-4 h-4 mr-1 inline-block text-black" />
+                Nur Deutschland-Ticket-Verbindungen
+              </Label>
             </div>
-          </div>
-          <div className="mt-4">
-            <Label htmlFor="umstiege">
-              <span className="inline-flex items-center gap-1"><Shuffle className="w-4 h-4" />Maximale Umstiege</span>
-            </Label>
-            <Input
-              id="umstiege"
-              type="number"
-              min="0"
-              max="5"
-              value={maximaleUmstiege}
-              onChange={(e) => setMaximaleUmstiege(e.target.value)}
-              className="w-24 mt-1"
-            />
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="direktverbindungen"
+                checked={nurDirektverbindungen}
+                onCheckedChange={checked => handleDirektverbindungenChange(checked === true)}
+              />
+              <Label htmlFor="direktverbindungen">
+                <ArrowRight className="w-4 h-4 mr-1 inline-block text-black" />
+                Nur Direktverbindungen
+              </Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Label htmlFor="umstiege" className="mb-0">
+                <span className="inline-flex items-center gap-1"><Shuffle className="w-4 h-4 text-black" />Maximale Umstiege</span>
+              </Label>
+              <Input
+                id="umstiege"
+                type="number"
+                min="0"
+                max="5"
+                value={maximaleUmstiege}
+                onChange={handleMaximaleUmstiegeChange}
+                className={`w-24 ${nurDirektverbindungen ? 'bg-gray-100 text-gray-500' : ''}`}
+              />
+            </div>
           </div>
         </div>
 
