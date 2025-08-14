@@ -39,11 +39,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
   const [ermaessigungArt, setErmaessigungArt] = useState(searchParams.ermaessigungArt || "KEINE_ERMAESSIGUNG")
   const [ermaessigungKlasse, setErmaessigungKlasse] = useState(searchParams.ermaessigungKlasse || "KLASSENLOS")
   const [klasse, setKlasse] = useState(searchParams.klasse || "KLASSE_2")
-  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(
-    searchParams.schnelleVerbindungen === undefined
-      ? true
-      : searchParams.schnelleVerbindungen === "1"
-  )
+  const [schnelleVerbindungen, setSchnelleVerbindungen] = useState(searchParams.schnelleVerbindungen === "1")
   const [nurDeutschlandTicket, setNurDeutschlandTicket] = useState(
     searchParams.nurDeutschlandTicketVerbindungen === "1",
   )

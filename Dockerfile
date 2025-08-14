@@ -1,8 +1,8 @@
 # 1. Basis-Image
 FROM node:20-alpine AS builder
 
-# pnpm installieren
-RUN npm install -g pnpm
+# pnpm installieren 
+RUN npm install -g pnpm@7
 
 # 2. Arbeitsverzeichnis
 WORKDIR /app
@@ -21,6 +21,9 @@ RUN pnpm build
 FROM node:20-alpine
 
 WORKDIR /app
+
+# pnpm im Production-Image installieren
+RUN npm install -g pnpm
 
 COPY --from=builder /app ./
 

@@ -1,16 +1,41 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
 
+// Durchschnittswerte für Response-Zeiten (ms) - global für alle Sessions
+let averageUncachedResponseTime = 2000 // Startwert 2s
+let averageCachedResponseTime = 100 // Startwert 0.1s
+const alpha = 0.2 // Glättungsfaktor für gleitenden Mittelwert
+
 // Progress-Update-Funktion
-async function updateProgress(sessionId: string, currentDay: number, totalDays: number, currentDate: string, isComplete = false) {
+async function updateProgress(
+  sessionId: string,
+  currentDay: number,
+  totalDays: number,
+  currentDate: string,
+  isComplete = false,
+  uncachedDays?: number,
+  cachedDays?: number,
+  avgUncachedTime?: number,
+  avgCachedTime?: number,
+) {
   try {
-    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/search-progress`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId, currentDay, totalDays, currentDate, isComplete })
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/search-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId,
+        currentDay,
+        totalDays,
+        currentDate,
+        isComplete,
+        uncachedDays,
+        cachedDays,
+        averageUncachedResponseTime: avgUncachedTime,
+        averageCachedResponseTime: avgCachedTime,
+      }),
     })
   } catch (error) {
-    console.error('Error updating progress:', error)
+    console.error("Error updating progress:", error)
   }
 }
 
@@ -685,11 +710,41 @@ export async function POST(request: NextRequest) {
     console.log(`\n🔍 Searching prices for ${maxDays} days starting from ${formatDateKey(startDate)}`)
     console.log(`📊 Cache status: ${cache.size} entries`)
 
+    // Erstelle Liste aller Tage mit Cache-Status
+    const dayStatusList: { date: string; isCached: boolean }[] = []
+    for (let dayCount = 0; dayCount < maxDays; dayCount++) {
+      const testDate = new Date(startDate)
+      testDate.setDate(testDate.getDate() + dayCount)
+      const cacheKey = generateCacheKey({
+        startStationId: startStation.normalizedId,
+        zielStationId: zielStation.normalizedId,
+        date: formatDateKey(testDate),
+        alter,
+        ermaessigungArt: ermaessigungArt || "KEINE_ERMAESSIGUNG",
+        ermaessigungKlasse: ermaessigungKlasse || "KLASSENLOS",
+        klasse,
+        maximaleUmstiege: Number.parseInt(maximaleUmstiege || "0"),
+        schnelleVerbindungen: Boolean(schnelleVerbindungen === true || schnelleVerbindungen === "true"),
+        nurDeutschlandTicketVerbindungen: Boolean(
+          nurDeutschlandTicketVerbindungen === true || nurDeutschlandTicketVerbindungen === "true",
+        ),
+      })
+      // Hier wird der Cache nur geprüft, nicht gefüllt.
+      const cachedEntry = cache.get(cacheKey)
+      const isCached = !!cachedEntry && Date.now() - cachedEntry.timestamp <= cachedEntry.ttl
+      dayStatusList.push({ date: formatDateKey(testDate), isCached })
+    }
+
+    // Gesamtanzahl der gecachten und ungecachten Tage für die gesamte Suche
+    let totalUncachedDays = dayStatusList.filter((d) => !d.isCached).length
+    let totalCachedDays = dayStatusList.filter((d) => d.isCached).length
+
     for (let dayCount = 0; dayCount < maxDays; dayCount++) {
       const currentDateStr = formatDateKey(currentDate)
-      
-      // Progress-Update senden BEVOR die Suche startet
-      await updateProgress(sessionId, dayCount, maxDays, currentDateStr, false)
+      const isCached = dayStatusList[dayCount].isCached
+
+      // Zeitmessung starten
+      const t0 = Date.now()
 
       // Übergib das Date-Objekt direkt
       const dayResponse = await getBestPrice({
@@ -710,6 +765,35 @@ export async function POST(request: NextRequest) {
         ankunftBis,
       })
 
+      // Zeitmessung beenden und Mittelwert aktualisieren
+      const duration = Date.now() - t0
+      if (isCached) {
+        averageCachedResponseTime = alpha * duration + (1 - alpha) * averageCachedResponseTime
+      } else {
+        // Die 'duration' ist die korrekte API-Antwortzeit. Die 1s Wartezeit ist separat.
+        averageUncachedResponseTime = alpha * duration + (1 - alpha) * averageUncachedResponseTime
+      }
+
+      // Reduziere die verbleibenden Tage nach der Verarbeitung
+      if (isCached) {
+        totalCachedDays--
+      } else {
+        totalUncachedDays--
+      }
+
+      // Progress-Update senden NACH dem Request
+      await updateProgress(
+        sessionId,
+        dayCount + 1, // Zählung bei 1 beginnen für die Anzeige
+        maxDays,
+        currentDateStr,
+        false,
+        totalUncachedDays, // Übergib die verbleibende Gesamtanzahl
+        totalCachedDays,
+        averageUncachedResponseTime,
+        averageCachedResponseTime,
+      )
+
       if (dayResponse.result) {
         Object.assign(results, dayResponse.result)
         console.log(`Day ${formatDateKey(currentDate)} result:`, Object.values(dayResponse.result)[0])
@@ -718,16 +802,23 @@ export async function POST(request: NextRequest) {
       // Rate limiting: Nur bei API-Aufrufen warten
       if (dayResponse.wasApiCall) {
         console.log(`⏳ Rate limiting: Waiting 1s after API call for ${formatDateKey(currentDate)}`)
-        await new Promise((resolve) => setTimeout(resolve, 1000)) // 1 Sekunde warten
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
 
       currentDate.setDate(currentDate.getDate() + 1)
     }
 
     // Final Progress-Update
-    await updateProgress(sessionId, maxDays, maxDays, formatDateKey(currentDate), true)
+    const finalDate = new Date(startDate)
+    finalDate.setDate(finalDate.getDate() + maxDays)
+    await updateProgress(sessionId, maxDays, maxDays, formatDateKey(finalDate), true)
 
     console.log(`\n✅ Bestpreissuche completed: ${Object.keys(results).length} days processed`)
+    console.log(
+      `📊 Final average times: API=${Math.round(averageUncachedResponseTime)}ms, Cache=${Math.round(
+        averageCachedResponseTime,
+      )}ms`,
+    )
     console.log(`📊 Final cache status: ${cache.size} entries`)
 
     // Add station info for booking links

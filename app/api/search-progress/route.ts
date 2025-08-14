@@ -13,32 +13,21 @@ interface SearchProgress {
   results?: any // Die finalen Suchergebnisse
 }
 
-// In-Memory Progress Store
-const progressStore = new Map<string, SearchProgress>()
-
-// Cleanup old progress entries every 5 minutes
-setInterval(() => {
-  const now = Date.now()
-  for (const [sessionId, progress] of progressStore.entries()) {
-    // Remove entries older than 30 minutes
-    if (now - progress.lastUpdate > 30 * 60 * 1000) {
-      progressStore.delete(sessionId)
-    }
-  }
-}, 5 * 60 * 1000)
+// In-Memory Progress-Cache als Map
+const progressCache = new Map<string, any>()
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const sessionId = searchParams.get('sessionId')
   
   if (!sessionId) {
-    return NextResponse.json({ error: 'Session ID required' }, { status: 400 })
+    return new Response(JSON.stringify({ error: 'sessionId required' }), { status: 400 })
   }
-  
-  const progress = progressStore.get(sessionId)
-  
-  if (!progress) {
-    return NextResponse.json({ 
+
+  const existingProgress = progressCache.get(sessionId)
+
+  if (!existingProgress) {
+    return new Response(JSON.stringify({ 
       error: 'Session not found',
       sessionId,
       currentDay: 0,
@@ -46,41 +35,54 @@ export async function GET(request: NextRequest) {
       isComplete: false,
       estimatedTimeRemaining: 0,
       currentDate: ''
-    }, { status: 404 })
+    }), { status: 404 })
   }
-  
-  return NextResponse.json(progress)
+
+  // Startzeit für ETA
+  const now = Date.now()
+  const startTime = existingProgress.startTime || now
+
+  return new Response(JSON.stringify({ ...existingProgress, startTime }))
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { sessionId, currentDay, totalDays, currentDate, isComplete, results } = body
-    
+    const {
+      sessionId,
+      currentDay,
+      totalDays,
+      currentDate,
+      isComplete,
+      results,
+      uncachedDays,
+      cachedDays,
+      averageUncachedResponseTime,
+      averageCachedResponseTime,
+    } = body
+
     if (!sessionId) {
-      return NextResponse.json({ error: 'Session ID required' }, { status: 400 })
+      return new Response(JSON.stringify({ error: 'sessionId required' }), { status: 400 })
     }
-    
+
     const now = Date.now()
-    const existingProgress = progressStore.get(sessionId)
-    
+    const existingProgress = progressCache.get(sessionId)
+
     let estimatedTimeRemaining = 0
-    let startTime = now
-    
-    if (existingProgress) {
-      startTime = existingProgress.startTime
-      const elapsed = now - startTime
-      const avgTimePerDay = elapsed / Math.max(currentDay, 1)
-      const remainingDays = totalDays - currentDay
-      estimatedTimeRemaining = Math.round((avgTimePerDay * remainingDays) / 1000)
-    } else if (currentDay > 0) {
-      // Estimate based on current progress if no existing data
-      const elapsed = 3000 // Assume 3 seconds per day as default
-      const avgTimePerDay = elapsed
-      const remainingDays = totalDays - currentDay
-      estimatedTimeRemaining = Math.round((avgTimePerDay * remainingDays) / 1000)
+    const startTime = existingProgress?.startTime || now
+
+    // Neue, präzisere ETA-Berechnung
+    if (
+      typeof uncachedDays === "number" &&
+      typeof cachedDays === "number" &&
+      typeof averageUncachedResponseTime === "number" &&
+      typeof averageCachedResponseTime === "number"
+    ) {
+      const etaUncached = uncachedDays * averageUncachedResponseTime
+      const etaCached = cachedDays * averageCachedResponseTime
+      estimatedTimeRemaining = Math.round((etaUncached + etaCached) / 1000)
     }
-    
+
     const progress: SearchProgress = {
       sessionId,
       currentDay,
@@ -90,16 +92,21 @@ export async function POST(request: NextRequest) {
       currentDate,
       startTime,
       lastUpdate: now,
-      results: results || undefined
+      results: results || undefined,
     }
-    
-    progressStore.set(sessionId, progress)
-    
-    console.log(`📊 Progress update: ${currentDay}/${totalDays} days (${Math.round((currentDay/totalDays)*100)}%) - ETA: ${estimatedTimeRemaining}s`)
-    
-    return NextResponse.json(progress)
+
+    // Progress speichern
+    progressCache.set(sessionId, { ...progress, updatedAt: Date.now() })
+
+    console.log(
+      `📊 Progress update: ${currentDay}/${totalDays} days (${Math.round(
+        (currentDay / totalDays) * 100,
+      )}%) - ETA: ${estimatedTimeRemaining}s`,
+    )
+
+    return new Response(JSON.stringify(progress))
   } catch (error) {
-    console.error('Error updating progress:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    console.error("Error updating progress:", error)
+    return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500 })
   }
 }
