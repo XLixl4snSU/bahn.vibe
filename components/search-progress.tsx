@@ -18,6 +18,8 @@ interface ProgressData {
   isComplete: boolean
   estimatedTimeRemaining: number
   currentDate: string
+  queueSize?: number
+  activeRequests?: number
 }
 
 export function SearchProgress({ sessionId, searchParams }: SearchProgressProps) {
@@ -127,6 +129,23 @@ export function SearchProgress({ sessionId, searchParams }: SearchProgressProps)
               )}
             </div>
           </div>
+          
+          {/* Rate Limiting Info */}
+          {!progress.isComplete && (progress.queueSize !== undefined && progress.queueSize > 0) && (
+            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded text-sm">
+              <div className="flex items-center gap-2">
+                <div className="text-yellow-600">⏳</div>
+                <div className="text-yellow-800">
+                  <span className="font-medium">Rate Limiting aktiv:</span> {progress.queueSize} weitere Suchanfrage{progress.queueSize !== 1 ? 'n' : ''} in der Warteschlange
+                </div>
+              </div>
+              <div className="text-xs text-yellow-700 mt-1">
+                Um die API nicht zu überlasten und die Funktionalität des Dienstes sicherzustellen, werden Anfragen in eine Warteschlange gestellt.
+                Die Verarbeitung kann daher länger dauern. Keine Sorge, die Ergebnisse werden gecached, sodass eine erneute Suche mit identischen Kriterien schneller ist.
+                Verringere die Anzahl der abgefragten Tage um die Wartezeit zu reduzieren.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

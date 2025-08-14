@@ -53,7 +53,7 @@ bahn.vibe is a Next.js application that helps you find the best train prices on 
 
 1. **Enter Stations**: Type start and destination stations (e.g., "München", "Berlin")
 2. **Select Date**: Choose your travel start date
-3. **Set Day Limit**: Choose how many consecutive days to search (1-30)
+3. 
 4. **Configure Options**: Select class, max transfers, and preferences
 5. **Search**: Click "Bestpreise suchen" to find the best prices
 6. **Book**: Click "Buchen →" on any result to book directly on bahn.de

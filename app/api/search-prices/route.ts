@@ -6,6 +6,189 @@ let averageUncachedResponseTime = 2000 // Startwert 2s
 let averageCachedResponseTime = 100 // Startwert 0.1s
 const alpha = 0.2 // Glättungsfaktor für gleitenden Mittelwert
 
+// Globales Rate Limiting für alle API-Calls
+interface QueuedRequest {
+  id: string
+  execute: () => Promise<any>
+  resolve: (value: any) => void
+  reject: (error: any) => void
+  timestamp: number
+}
+
+class GlobalRateLimiter {
+  private queue: QueuedRequest[] = []
+  private lastApiCallStart = 0 // Wann der letzte API-Call GESTARTET wurde
+  private minInterval = 1000 // Adaptive: Startet bei 1 Sekunde zwischen API-Call STARTS
+  private activeRequests = 0
+  private readonly maxConcurrentRequests = 1 // FIFO: Nur 1 Request gleichzeitig für echte Reihenfolge
+  
+  // Adaptive Rate Limiting
+  private readonly baseInterval = 1000 // Basis-Intervall (1 Sekunde)
+  private readonly maxInterval = 10000 // Maximum 10 Sekunden
+  private rateLimitHits = 0 // Anzahl 429-Fehler
+  private lastRateLimitTime = 0
+  private successfulRequests = 0 // Erfolgreiche Anfragen seit letztem 429
+  private processingTimer: NodeJS.Timeout | null = null
+
+  async addToQueue<T>(requestId: string, apiCall: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const queuedRequest: QueuedRequest = {
+        id: requestId,
+        execute: apiCall,
+        resolve,
+        reject,
+        timestamp: Date.now()
+      }
+      
+      // Füge zur Warteschlange hinzu (FIFO)
+      this.queue.push(queuedRequest)
+      console.log(`🎯 Added request ${requestId} to queue. Queue size: ${this.queue.length}, Current interval: ${this.minInterval}ms`)
+      
+      // Starte Verarbeitung falls noch nicht aktiv
+      this.scheduleNextProcessing()
+    })
+  }
+
+  private scheduleNextProcessing() {
+    // Wenn bereits ein Timer läuft oder keine Anfragen in der Queue, mache nichts
+    if (this.processingTimer || this.queue.length === 0 || this.activeRequests >= this.maxConcurrentRequests) {
+      return
+    }
+
+    // Berechne wann der nächste Request starten kann
+    const now = Date.now()
+    const timeSinceLastStart = now - this.lastApiCallStart
+    const delay = Math.max(0, this.minInterval - timeSinceLastStart)
+
+    console.log(`⏰ Scheduling next request processing in ${delay}ms`)
+    
+    this.processingTimer = setTimeout(() => {
+      this.processingTimer = null
+      this.processNextRequest()
+    }, delay)
+  }
+
+  private async processNextRequest() {
+    // Prüfe ob wir verarbeiten können
+    if (this.queue.length === 0 || this.activeRequests >= this.maxConcurrentRequests) {
+      return
+    }
+
+    // Hole den nächsten Request aus der Queue (FIFO)
+    const request = this.queue.shift()!
+    
+    console.log(`🚀 Starting API request ${request.id}. Queue size: ${this.queue.length}, Active: ${this.activeRequests}`)
+    
+    // Setze Zeitstempel und erhöhe aktive Requests
+    this.lastApiCallStart = Date.now()
+    this.activeRequests++
+
+    // Führe Request aus (async, damit wir den nächsten planen können)
+    this.executeRequestWithRetry(request).finally(() => {
+      this.activeRequests--
+      console.log(`✅ Completed request ${request.id}. Queue size: ${this.queue.length}, Active: ${this.activeRequests}`)
+      
+      // Plane nächsten Request falls Queue nicht leer
+      this.scheduleNextProcessing()
+    })
+
+    // Plane bereits den nächsten Request (falls vorhanden)
+    this.scheduleNextProcessing()
+  }
+
+  private async executeRequestWithRetry(request: QueuedRequest, retryCount = 0) {
+    const maxRetries = 3
+    
+    try {
+      const result = await request.execute()
+      
+      // Erfolgreicher Request - Rate Limit kann langsam reduziert werden
+      this.onRequestSuccess()
+      request.resolve(result)
+      
+    } catch (error) {
+      const isRateLimitError = error instanceof Error && 
+        (error.message.includes('429') || error.message.includes('Too Many Requests'))
+      
+      if (isRateLimitError) {
+        console.log(`🚫 Rate limit hit (429) for request ${request.id}`)
+        this.onRateLimitHit()
+        
+        // Retry bei 429-Fehlern - aber Request geht ZURÜCK an das ENDE der Queue
+        if (retryCount < maxRetries) {
+          const retryDelay = this.calculateRetryDelay(retryCount)
+          console.log(`🔄 Re-queueing request ${request.id} after ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`)
+          
+          setTimeout(() => {
+            // Erstelle neuen Request für Retry und füge ihn am Ende der Queue hinzu
+            const retryRequest: QueuedRequest = {
+              ...request,
+              timestamp: Date.now()
+            }
+            this.queue.push(retryRequest)
+            
+            // Wrap original execute function für Retry-Count
+            const originalExecute = retryRequest.execute
+            retryRequest.execute = () => originalExecute()
+            
+            console.log(`🔄 Request ${request.id} re-queued. Queue size: ${this.queue.length}`)
+            this.scheduleNextProcessing()
+          }, retryDelay)
+          return
+        }
+      }
+      
+      // Alle Retries aufgebraucht oder anderer Fehler
+      request.reject(error)
+    }
+  }
+
+  private onRateLimitHit() {
+    this.rateLimitHits++
+    this.lastRateLimitTime = Date.now()
+    this.successfulRequests = 0
+    
+    // Sanftere Erhöhung: +50% statt Verdopplung, aber nicht über Maximum
+    const newInterval = Math.min(this.minInterval * 1.5, this.maxInterval)
+    
+    console.log(`📈 Rate limit hit! Increasing interval from ${this.minInterval}ms to ${Math.round(newInterval)}ms (hits: ${this.rateLimitHits})`)
+    this.minInterval = Math.round(newInterval)
+  }
+
+  private onRequestSuccess() {
+    this.successfulRequests++
+    
+    // Schnellere Reduktion: Nach nur 3 erfolgreichen Requests statt 10
+    if (this.successfulRequests >= 3 && this.minInterval > this.baseInterval) {
+      // Stärkere Reduktion: -25% statt -20%
+      const newInterval = Math.max(this.minInterval * 0.75, this.baseInterval)
+      
+      if (newInterval < this.minInterval) {
+        console.log(`📉 Reducing interval from ${this.minInterval}ms to ${Math.round(newInterval)}ms after ${this.successfulRequests} successful requests`)
+        this.minInterval = Math.round(newInterval)
+        this.successfulRequests = 0
+      }
+    }
+  }
+
+  private calculateRetryDelay(retryCount: number): number {
+    // Exponential backoff: 2s, 4s, 8s
+    return Math.min(2000 * Math.pow(2, retryCount), 8000)
+  }
+
+  getQueueStatus() {
+    return {
+      queueSize: this.queue.length,
+      activeRequests: this.activeRequests,
+      lastApiCall: this.lastApiCallStart,
+      currentInterval: this.minInterval
+    }
+  }
+}
+
+// Globale Instanz des Rate Limiters
+const globalRateLimiter = new GlobalRateLimiter()
+
 // Progress-Update-Funktion
 async function updateProgress(
   sessionId: string,
@@ -19,6 +202,9 @@ async function updateProgress(
   avgCachedTime?: number,
 ) {
   try {
+    // Hole aktuelle Warteschlangen-Informationen
+    const queueStatus = globalRateLimiter.getQueueStatus()
+    
     await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/search-progress`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -32,6 +218,8 @@ async function updateProgress(
         cachedDays,
         averageUncachedResponseTime: avgUncachedTime,
         averageCachedResponseTime: avgCachedTime,
+        queueSize: queueStatus.queueSize,
+        activeRequests: queueStatus.activeRequests,
       }),
     })
   } catch (error) {
@@ -50,8 +238,8 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>()
 
 // Cache-Konfiguration
-const CACHE_TTL = 30 * 60 * 1000 // 30 Minuten in Millisekunden
-const MAX_CACHE_ENTRIES = 10000
+const CACHE_TTL = 60 * 60 * 1000 // 60 Minuten in Millisekunden
+const MAX_CACHE_ENTRIES = 100000
 
 // Cache-Hilfsfunktionen
 function generateCacheKey(params: {
@@ -327,43 +515,41 @@ async function getBestPrice(config: any): Promise<{ result: TrainResults | null;
   }
 
   try {
-    // Match the working curl headers exactly
-    const response = await fetch("https://www.bahn.de/web/api/angebote/tagesbestpreis", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json; charset=utf-8",
-        "Accept-Encoding": "gzip",
-        Origin: "https://www.bahn.de",
-        Referer: "https://www.bahn.de/buchung/fahrplan/suche",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
-        Connection: "close",
-      },
-      body: JSON.stringify(requestBody),
+    // API-Call über globalen Rate Limiter
+    const requestId = `${tag}-${config.startStationNormalizedId}-${config.zielStationNormalizedId}`
+    const apiCallResult = await globalRateLimiter.addToQueue(requestId, async () => {
+      console.log(`🌐 Executing API call for ${tag}`)
+      
+      // Match the working curl headers exactly
+      const response = await fetch("https://www.bahn.de/web/api/angebote/tagesbestpreis", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json; charset=utf-8",
+          "Accept-Encoding": "gzip",
+          Origin: "https://www.bahn.de",
+          Referer: "https://www.bahn.de/buchung/fahrplan/suche",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+          Connection: "close",
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        let errorText = ""
+        try {
+          errorText = await response.text()
+          console.error(`HTTP ${response.status} error:`, errorText)
+        } catch (e) {
+          console.error("Could not read error response")
+        }
+        throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 100)}`)
+      }
+
+      return await response.text()
     })
 
-    if (!response.ok) {
-      let errorText = ""
-      try {
-        errorText = await response.text()
-        console.error(`HTTP ${response.status} error:`, errorText)
-      } catch (e) {
-        console.error("Could not read error response")
-      }
-
-      const errorResult = {
-        [tag]: {
-          preis: 0,
-          info: `API Error ${response.status}: ${errorText.slice(0, 100)}`,
-          abfahrtsZeitpunkt: "",
-          ankunftsZeitpunkt: "",
-        },
-      }
-      
-      return { result: errorResult, wasApiCall: true }
-    }
-
-    const responseText = await response.text()
+    const responseText = apiCallResult
 
     // Check if response contains error message
     if (responseText.includes("Preisauskunft nicht möglich")) {
@@ -753,9 +939,35 @@ export async function POST(request: NextRequest) {
     let totalUncachedDays = dayStatusList.filter((d) => !d.isCached).length
     let totalCachedDays = dayStatusList.filter((d) => d.isCached).length
 
+    // Initialer Progress-Update - zeigt sofort die Queue-Size an
+    await updateProgress(
+      sessionId,
+      0, // Start bei Tag 0
+      maxDays,
+      formatDateKey(startDate),
+      false,
+      totalUncachedDays,
+      totalCachedDays,
+      averageUncachedResponseTime,
+      averageCachedResponseTime,
+    )
+
     for (let dayCount = 0; dayCount < maxDays; dayCount++) {
       const currentDateStr = formatDateKey(currentDate)
       const isCached = dayStatusList[dayCount].isCached
+
+      // Progress-Update senden BEVOR dem Request (um Queue-Size sofort anzuzeigen)
+      await updateProgress(
+        sessionId,
+        dayCount, // Aktueller Tag (0-basiert für "vor" dem Request)
+        maxDays,
+        currentDateStr,
+        false,
+        totalUncachedDays,
+        totalCachedDays,
+        averageUncachedResponseTime,
+        averageCachedResponseTime,
+      )
 
       // Zeitmessung starten
       const t0 = Date.now()
@@ -795,7 +1007,7 @@ export async function POST(request: NextRequest) {
         totalUncachedDays--
       }
 
-      // Progress-Update senden NACH dem Request
+      // Progress-Update senden NACH dem Request (mit aktualisierten Werten)
       await updateProgress(
         sessionId,
         dayCount + 1, // Zählung bei 1 beginnen für die Anzeige
@@ -811,12 +1023,6 @@ export async function POST(request: NextRequest) {
       if (dayResponse.result) {
         Object.assign(results, dayResponse.result)
         console.log(`Day ${formatDateKey(currentDate)} result:`, Object.values(dayResponse.result)[0])
-      }
-
-      // Rate limiting: Nur bei API-Aufrufen warten
-      if (dayResponse.wasApiCall) {
-        console.log(`⏳ Rate limiting: Waiting 1s after API call for ${formatDateKey(currentDate)}`)
-        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
 
       currentDate.setDate(currentDate.getDate() + 1)

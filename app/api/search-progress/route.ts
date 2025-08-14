@@ -1,112 +1,103 @@
 import { NextRequest, NextResponse } from "next/server"
 
-// Progress-Tracking Interface
-interface SearchProgress {
-  sessionId: string
+// In-Memory Storage für Progress-Daten
+const progressStorage = new Map<string, {
   currentDay: number
   totalDays: number
-  isComplete: boolean
-  estimatedTimeRemaining: number // in seconds
   currentDate: string
-  startTime: number
-  lastUpdate: number
-  results?: any // Die finalen Suchergebnisse
-}
+  isComplete: boolean
+  uncachedDays?: number
+  cachedDays?: number
+  averageUncachedResponseTime?: number
+  averageCachedResponseTime?: number
+  queueSize?: number
+  activeRequests?: number
+  timestamp: number
+}>()
 
-// In-Memory Progress-Cache als Map
-const progressCache = new Map<string, any>()
-
+// GET - Progress-Daten abrufen
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
-  const sessionId = searchParams.get('sessionId')
-  
-  if (!sessionId) {
-    return new Response(JSON.stringify({ error: 'sessionId required' }), { status: 400 })
+  try {
+    const url = new URL(request.url)
+    const sessionId = url.searchParams.get('sessionId')
+    
+    if (!sessionId) {
+      return NextResponse.json({ error: "sessionId required" }, { status: 400 })
+    }
+
+    const progressData = progressStorage.get(sessionId)
+    
+    if (!progressData) {
+      // Default-Werte wenn noch keine Daten vorhanden
+      return NextResponse.json({
+        currentDay: 0,
+        totalDays: 0,
+        isComplete: false,
+        estimatedTimeRemaining: 0,
+        currentDate: "",
+        queueSize: 0,
+        activeRequests: 0
+      })
+    }
+
+    // Berechne geschätzte verbleibende Zeit
+    let estimatedTimeRemaining = 0
+    if (!progressData.isComplete && progressData.uncachedDays && progressData.averageUncachedResponseTime) {
+      // Grobe Schätzung: verbleibende ungecachte Tage * durchschnittliche API-Zeit + Rate Limiting
+      const baseTime = progressData.uncachedDays * (progressData.averageUncachedResponseTime / 1000)
+      const rateLimitingTime = progressData.uncachedDays * 1 // 1 Sekunde pro API-Call wegen Rate Limiting
+      estimatedTimeRemaining = Math.round(baseTime + rateLimitingTime)
+    }
+
+    return NextResponse.json({
+      currentDay: progressData.currentDay,
+      totalDays: progressData.totalDays,
+      currentDate: progressData.currentDate,
+      isComplete: progressData.isComplete,
+      estimatedTimeRemaining,
+      queueSize: progressData.queueSize || 0,
+      activeRequests: progressData.activeRequests || 0
+    })
+  } catch (error) {
+    console.error("Error getting progress:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
-
-  const existingProgress = progressCache.get(sessionId)
-
-  if (!existingProgress) {
-    return new Response(JSON.stringify({ 
-      error: 'Session not found',
-      sessionId,
-      currentDay: 0,
-      totalDays: 0,
-      isComplete: false,
-      estimatedTimeRemaining: 0,
-      currentDate: ''
-    }), { status: 404 })
-  }
-
-  // Startzeit für ETA
-  const now = Date.now()
-  const startTime = existingProgress.startTime || now
-
-  return new Response(JSON.stringify({ ...existingProgress, startTime }))
 }
 
+// POST - Progress-Daten speichern
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const {
-      sessionId,
-      currentDay,
-      totalDays,
-      currentDate,
-      isComplete,
-      results,
-      uncachedDays,
-      cachedDays,
-      averageUncachedResponseTime,
-      averageCachedResponseTime,
-    } = body
-
+    const data = await request.json()
+    const { sessionId } = data
+    
     if (!sessionId) {
-      return new Response(JSON.stringify({ error: 'sessionId required' }), { status: 400 })
+      return NextResponse.json({ error: "sessionId required" }, { status: 400 })
     }
 
-    const now = Date.now()
-    const existingProgress = progressCache.get(sessionId)
+    // Speichere Progress-Daten
+    progressStorage.set(sessionId, {
+      ...data,
+      timestamp: Date.now()
+    })
 
-    let estimatedTimeRemaining = 0
-    const startTime = existingProgress?.startTime || now
+    console.log(`📊 Progress update for session ${sessionId}: Day ${data.currentDay}/${data.totalDays}, Queue: ${data.queueSize || 0}, Active: ${data.activeRequests || 0}`)
 
-    // Neue, präzisere ETA-Berechnung
-    if (
-      typeof uncachedDays === "number" &&
-      typeof cachedDays === "number" &&
-      typeof averageUncachedResponseTime === "number" &&
-      typeof averageCachedResponseTime === "number"
-    ) {
-      const etaUncached = uncachedDays * averageUncachedResponseTime
-      const etaCached = cachedDays * averageCachedResponseTime
-      estimatedTimeRemaining = Math.round((etaUncached + etaCached) / 1000)
-    }
-
-    const progress: SearchProgress = {
-      sessionId,
-      currentDay,
-      totalDays,
-      isComplete: isComplete || currentDay >= totalDays,
-      estimatedTimeRemaining: Math.max(0, estimatedTimeRemaining),
-      currentDate,
-      startTime,
-      lastUpdate: now,
-      results: results || undefined,
-    }
-
-    // Progress speichern
-    progressCache.set(sessionId, { ...progress, updatedAt: Date.now() })
-
-    console.log(
-      `📊 Progress update: ${currentDay}/${totalDays} days (${Math.round(
-        (currentDay / totalDays) * 100,
-      )}%) - ETA: ${estimatedTimeRemaining}s`,
-    )
-
-    return new Response(JSON.stringify(progress))
+    return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error updating progress:", error)
-    return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500 })
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
+// Cleanup alte Progress-Daten (älter als 1 Stunde)
+setInterval(() => {
+  const now = Date.now()
+  const oneHour = 60 * 60 * 1000
+  
+  for (const [sessionId, data] of progressStorage.entries()) {
+    if (now - data.timestamp > oneHour) {
+      progressStorage.delete(sessionId)
+      console.log(`🧹 Cleaned up old progress data for session ${sessionId}`)
+    }
+  }
+}, 5 * 60 * 1000) // Cleanup alle 5 Minuten
