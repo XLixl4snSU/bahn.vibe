@@ -55,7 +55,7 @@ specifiers:
   tailwindcss: ^3.4.17
   tailwindcss-animate: ^1.0.7
   typescript: ^5
-  vaul: ^0.9.6
+  vaul: ^1.1.2
   zod: ^3.24.1
 
 dependencies:
@@ -107,7 +107,7 @@ dependencies:
   sonner: 1.7.4_6qpiazawufkd5n22ferrdsggza
   tailwind-merge: 2.6.0
   tailwindcss-animate: 1.0.7_tailwindcss@3.4.17
-  vaul: 0.9.9_agtmsl2ldp5slbutdt23ocwpna
+  vaul: 1.1.2_agtmsl2ldp5slbutdt23ocwpna
   zod: 3.25.76
 
 devDependencies:
@@ -3175,11 +3175,11 @@ packages:
   /util-deprecate/1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
-  /vaul/0.9.9_agtmsl2ldp5slbutdt23ocwpna:
-    resolution: {integrity: sha512-7afKg48srluhZwIkaU+lgGtFCUsYBSGOl8vcc8N/M3YQlZFlynHD15AE+pwrYdc826o7nrIND4lL9Y6b9WWZZQ==}
+  /vaul/1.1.2_agtmsl2ldp5slbutdt23ocwpna:
+    resolution: {integrity: sha512-ZFkClGpWyI2WUQjdLJ/BaGuV6AVQiJ3uELGk3OYtP+B6yCO7Cmn9vPFXVJkRaGkOJu3m8bQMgtyzNHixULceQA==}
     peerDependencies:
-      react: ^16.8 || ^17.0 || ^18.0
-      react-dom: ^16.8 || ^17.0 || ^18.0
+      react: ^16.8 || ^17.0 || ^18.0 || ^19.0.0 || ^19.0.0-rc
+      react-dom: ^16.8 || ^17.0 || ^18.0 || ^19.0.0 || ^19.0.0-rc
     dependencies:
       '@radix-ui/react-dialog': 1.1.4_agtmsl2ldp5slbutdt23ocwpna
       react: 19.1.1
