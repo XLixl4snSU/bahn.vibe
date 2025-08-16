@@ -54,6 +54,15 @@ export async function POST(request: NextRequest) {
     } = body
 
     console.log("\n🚂 Starting bestpreissuche request")
+    console.log(`🌍 Environment: ${process.env.VERCEL ? 'Vercel Production' : 'Local Development'}`)
+    console.log(`📍 Request details:`)
+    console.log(`   - Start: ${start}`)
+    console.log(`   - Ziel: ${ziel}`)
+    console.log(`   - Tage: ${tage ? `[${tage.slice(0, 3).join(', ')}${tage.length > 3 ? '...' : ''}]` : 'none (using fallback)'}`)
+    console.log(`   - Session: ${providedSessionId || 'auto-generated'}`)
+    console.log(`   - User-Agent: ${request.headers.get('user-agent')?.slice(0, 50) || 'unknown'}`)
+    console.log(`   - Origin: ${request.headers.get('origin') || 'unknown'}`)
+    console.log(`   - Referer: ${request.headers.get('referer') || 'unknown'}`)
 
     if (!start || !ziel) {
       return NextResponse.json({ error: "Start and destination required" }, { status: 400 })
