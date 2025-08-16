@@ -1,5 +1,6 @@
 import { TrainSearchForm } from "@/components/train-search-form"
 import { TrainResults } from "@/components/train-results"
+import { getAppVersion, getCurrentYear } from "@/lib/app-info"
 
 interface SearchParams {
   start?: string
@@ -20,6 +21,9 @@ export default async function Page({
 }) {
   const params = await searchParams
   const hasSearch = params.start && params.ziel
+  
+  const currentYear = getCurrentYear()
+  const appVersion = getAppVersion()
 
   return (
     <div className="min-h-screen bg-white">
@@ -30,7 +34,7 @@ export default async function Page({
               sparpreis.guru
             </a>
           </h1>
-          <p className="text-gray-600 italic">Finde die günstigste Bahnreise mit einem Preiskalender</p>
+          <p className="text-gray-600 italic">Der Sparpreiskalender!</p>
         </header>
 
         <section className="mb-8">
@@ -42,7 +46,19 @@ export default async function Page({
                 <TrainResults searchParams={params} />
             ) : <></>}
           </section>
-        </div>
+        
+        {/* Footer */}
+        <footer className="mt-16 border-t border-gray-200 pt-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500">
+            <div>
+              © {currentYear} <span className="font-medium text-gray-600">sparpreis.guru</span> - Alle Rechte vorbehalten
+            </div>
+            <div className="mt-2 sm:mt-0">
+              Version {appVersion}
+            </div>
+          </div>
+        </footer>
       </div>
+    </div>
   )
 }
