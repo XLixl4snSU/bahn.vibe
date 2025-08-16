@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-
-// Storage für abgebrochene Sessions
-const cancelledSessions = new Set<string>()
+import { globalRateLimiter } from "../rate-limiter"
 
 // GET - Prüfe ob Session abgebrochen wurde
 export async function GET(request: NextRequest) {
@@ -13,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "sessionId required" }, { status: 400 })
     }
 
-    const isCancelled = cancelledSessions.has(sessionId)
+    const isCancelled = globalRateLimiter.isSessionCancelledSync(sessionId)
     
     return NextResponse.json({
       isCancelled,
@@ -36,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prüfe ob Session bereits als abgebrochen markiert ist
-    if (cancelledSessions.has(sessionId)) {
+    if (globalRateLimiter.isSessionCancelledSync(sessionId)) {
       return NextResponse.json({ 
         success: true, 
         sessionId,
@@ -45,16 +43,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Session als abgebrochen markieren
-    cancelledSessions.add(sessionId)
+    // Informiere Rate-Limiter über Cancel
+    globalRateLimiter.cancelSession(sessionId, reason)
     
     console.log(`🛑 Session ${sessionId} cancelled (reason: ${reason})`)
-    
-    // Auto-cleanup nach 5 Minuten
-    setTimeout(() => {
-      cancelledSessions.delete(sessionId)
-      console.log(`🧹 Cleaned up cancelled session ${sessionId}`)
-    }, 5 * 60 * 1000)
 
     return NextResponse.json({ 
       success: true, 

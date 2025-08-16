@@ -24,6 +24,9 @@ class GlobalRateLimiter {
   private activeRequests = 0
   private readonly maxConcurrentRequests = 3 // Bis zu 3 parallele Requests für bessere Performance
   
+  // Interne Cancel-Session Verwaltung
+  private cancelledSessions = new Set<string>() // Cancelled Sessions
+  
   // Adaptive Rate Limiting mit DB-API Burst-Logik
   private readonly baseInterval = 1200 // Basis-Intervall (1,2 Sekunden)
   private readonly burstInterval = 2000 // Nach Burst-Limit: 2 Sekunden
@@ -373,16 +376,24 @@ class GlobalRateLimiter {
 
   // Prüfe ob Session abgebrochen wurde
   private async isSessionCancelled(sessionId: string): Promise<boolean> {
-    try {
-      const response = await fetch(`/api/search-prices/cancel-search?sessionId=${sessionId}`)
-      if (response.ok) {
-        const data = await response.json()
-        return data.isCancelled === true
-      }
-    } catch (error) {
-      console.warn(`Could not check cancel status for session ${sessionId}:`, error)
-    }
-    return false
+    // Verwende internen cancelled sessions cache
+    return this.cancelledSessions.has(sessionId)
+  }
+
+  // Neue Methoden für Cancel-Session Management
+  public cancelSession(sessionId: string, reason: string = 'user_request'): void {
+    console.log(`🛑 Cancelling session ${sessionId} (reason: ${reason})`)
+    this.cancelledSessions.add(sessionId)
+    
+    // Auto-cleanup nach 5 Minuten
+    setTimeout(() => {
+      this.cancelledSessions.delete(sessionId)
+      console.log(`🧹 Auto-cleaned cancelled session ${sessionId}`)
+    }, 5 * 60 * 1000)
+  }
+
+  public isSessionCancelledSync(sessionId: string): boolean {
+    return this.cancelledSessions.has(sessionId)
   }
 
   getQueueStatus(sessionId?: string) {

@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         let isStreamClosed = false
         let cancelNotificationSent = false  // Verhindere mehrfache Cancel-Notifications
+        let cancelLoggedForSession = false  // Verhindere mehrfache Cancel-Logs pro Session
         
         // Helper function to safely enqueue data
         const safeEnqueue = (data: Uint8Array) => {
@@ -91,18 +92,11 @@ export async function POST(request: NextRequest) {
               controller.enqueue(data)
               return true
             } catch (error) {
-              console.log(`ℹ️ Stream was closed by user - search stopped gracefully`)
-              isStreamClosed = true
-              
-              // Markiere Session nur einmal als abgebrochen
-              if (!cancelNotificationSent && sessionId) {
+              if (!cancelNotificationSent) {
+                console.log(`ℹ️ User disconnected - search stopped gracefully (session: ${sessionId})`)
                 cancelNotificationSent = true
-                fetch('/api/search-prices/cancel-search', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ sessionId, reason: 'stream_closed' })
-                }).catch(() => {}) // Silent fail
               }
+              isStreamClosed = true
               return false
             }
           }
@@ -231,6 +225,7 @@ export async function POST(request: NextRequest) {
                 nurDeutschlandTicketVerbindungen === true || nurDeutschlandTicketVerbindungen === "1",
               abfahrtAb,
               ankunftBis,
+              cancelLoggedForSession, // Teile den Cancel-Log Status
             })
 
             const duration = Date.now() - t0
@@ -259,7 +254,7 @@ export async function POST(request: NextRequest) {
                 }
                 
                 if (!safeEnqueue(encoder.encode(JSON.stringify(dayResult) + '\n'))) {
-                  console.log(`ℹ️ User disconnected - stopping further result streaming`)
+                  // User disconnected - stop processing but don't log multiple times
                   return false
                 }
               }
@@ -287,7 +282,10 @@ export async function POST(request: NextRequest) {
               
               // Behandle cancelled sessions nicht als Fehler
               if (error instanceof Error && error.message.includes('was cancelled')) {
-                console.log(`ℹ️ Request was cancelled (user aborted search)`)
+                if (!cancelLoggedForSession) {
+                  console.log(`ℹ️ Search was cancelled by user (session: ${sessionId})`)
+                  cancelLoggedForSession = true
+                }
                 return true
               }
               

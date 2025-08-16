@@ -547,7 +547,7 @@ export async function getBestPrice(config: any): Promise<{ result: TrainResults 
   } catch (error) {
     // Spezielle Behandlung für cancelled sessions
     if (error instanceof Error && error.message.includes('was cancelled')) {
-      console.log(`ℹ️ Search for ${tag} was cancelled by user`)
+      // Logging wird bereits in route.ts behandelt
       const result = {
         [tag]: {
           preis: 0,

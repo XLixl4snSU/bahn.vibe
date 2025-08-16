@@ -268,6 +268,11 @@ export function TrainResults({ searchParams }: TrainResultsProps) {
                       setLoading(false)
                       setIsStreaming(false)
                       setSessionId(null)
+                      
+                      // Verwende actualDaysSearched wenn verfügbar
+                      if (data.actualDaysSearched) {
+                        console.log(`✅ Search completed: ${data.actualDaysSearched} days actually returned`)
+                      }
                       return
                     }
                   } catch (parseError) {
