@@ -302,6 +302,13 @@ class GlobalRateLimiter {
     const newInterval = Math.min(this.minInterval * 1.5, this.maxInterval)
     
     console.log(`📈 Rate limit hit! Increasing interval from ${this.minInterval}ms to ${Math.round(newInterval)}ms (hits: ${this.rateLimitHits})`)
+    console.log(`🚫 Rate limit context:`)
+    console.log(`   - Total rate limit hits: ${this.rateLimitHits}`)
+    console.log(`   - Active requests: ${this.activeRequests}`)
+    console.log(`   - Queue sessions: ${this.sessionQueues.size}`)
+    console.log(`   - Environment: ${process.env.VERCEL ? 'Vercel' : 'Local'}`)
+    console.log(`   - New interval: ${Math.round(newInterval)}ms`)
+    
     this.minInterval = Math.round(newInterval)
   }
 

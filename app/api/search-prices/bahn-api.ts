@@ -17,7 +17,8 @@ export async function searchBahnhof(search: string): Promise<{ id: string; norma
     const encodedSearch = encodeURIComponent(search)
     const url = `https://www.bahn.de/web/api/reiseloesung/orte?suchbegriff=${encodedSearch}&typ=ALL&limit=10`
 
-    console.log(`Searching station: "${search}"`)
+    console.log(`🔍 Searching station: "${search}"`)
+    console.log(`📡 Station search URL: ${url}`)
 
     const response = await fetch(url, {
       headers: {
@@ -28,10 +29,28 @@ export async function searchBahnhof(search: string): Promise<{ id: string; norma
       },
     })
 
-    if (!response.ok) return null
+    console.log(`📡 Station search response: ${response.status} ${response.statusText}`)
+
+    if (!response.ok) {
+      let errorText = ""
+      try {
+        errorText = await response.text()
+        console.error(`❌ Station search failed (${response.status}):`, errorText)
+        
+        if (response.status === 403 && errorText.includes("OPS_BLOCKED")) {
+          console.error(`🚫 Station search OPS_BLOCKED - API is blocking requests`)
+        }
+      } catch (e) {
+        console.error(`❌ Station search failed with status ${response.status}, could not read response`)
+      }
+      return null
+    }
 
     const data = await response.json()
-    if (!data || data.length === 0) return null
+    if (!data || data.length === 0) {
+      console.log(`❌ No stations found for "${search}"`)
+      return null
+    }
 
     const station = data[0]
     const originalId = station.id
@@ -301,32 +320,71 @@ export async function getBestPrice(config: any): Promise<{ result: TrainResults 
     const requestId = `${tag}-${config.startStationNormalizedId}-${config.zielStationNormalizedId}`
     const apiCallResult = await globalRateLimiter.addToQueue(requestId, async () => {
       console.log(`🌐 Executing API call for ${tag}`)
+      console.log(`🔧 Request details:`)
+      console.log(`   - Station IDs: ${config.abfahrtsHalt} → ${config.ankunftsHalt}`)
+      console.log(`   - Date: ${datum}`)
+      console.log(`   - Session: ${sessionId}`)
+      console.log(`   - Class: ${config.klasse}`)
+      console.log(`   - Max transfers: ${config.maximaleUmstiege}`)
+      
+      // Log request body for debugging
+      console.log(`📤 Request body:`, JSON.stringify(requestBody, null, 2))
+      
       // Match the working curl headers exactly
+      const headers = {
+        Accept: "application/json",
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept-Encoding": "gzip",
+        Origin: "https://www.bahn.de",
+        Referer: "https://www.bahn.de/buchung/fahrplan/suche",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+        Connection: "close",
+      }
+      
+      console.log(`📋 Request headers:`, JSON.stringify(headers, null, 2))
+      
       const response = await fetch("https://www.bahn.de/web/api/angebote/tagesbestpreis", {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json; charset=utf-8",
-          "Accept-Encoding": "gzip",
-          Origin: "https://www.bahn.de",
-          Referer: "https://www.bahn.de/buchung/fahrplan/suche",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
-          Connection: "close",
-        },
+        headers,
         body: JSON.stringify(requestBody),
       })
+
+      console.log(`📡 Response status: ${response.status} ${response.statusText}`)
+      console.log(`📋 Response headers:`, JSON.stringify(Object.fromEntries(response.headers), null, 2))
 
       if (!response.ok) {
         let errorText = ""
         try {
           errorText = await response.text()
-          console.error(`HTTP ${response.status} error:`, errorText)
+          console.error(`❌ HTTP ${response.status} error for ${tag}:`)
+          console.error(`   Full error response:`, errorText)
+          
+          // Spezielle Behandlung für 403 OPS_BLOCKED
+          if (response.status === 403 && errorText.includes("OPS_BLOCKED")) {
+            console.error(`🚫 OPS_BLOCKED Error Details:`)
+            console.error(`   - This indicates the Bahn API has blocked our requests`)
+            console.error(`   - Possible causes: Too many requests, suspicious patterns, IP blocking`)
+            console.error(`   - Current request rate: ${config.currentInterval || 'unknown'}ms interval`)
+            console.error(`   - Session: ${sessionId}`)
+            console.error(`   - Request ID: ${requestId}`)
+            console.error(`   - Deployment environment: ${process.env.VERCEL ? 'Vercel' : 'Local'}`)
+            console.error(`   - User-Agent: ${headers["User-Agent"]}`)
+            
+            try {
+              const errorJson = JSON.parse(errorText)
+              console.error(`   - Error Reference ID: ${errorJson.errorRefId}`)
+              console.error(`   - Error Code: ${errorJson.code}`)
+            } catch (e) {
+              console.error(`   - Could not parse error JSON`)
+            }
+          }
         } catch (e) {
           console.error("Could not read error response")
         }
-        throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 100)}`)
+        throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 200)}`)
       }
 
+      console.log(`✅ Successful API response for ${tag}`)
       return await response.text()
     }, sessionId) // SessionId übergeben für Abbruch-Prüfung
 
