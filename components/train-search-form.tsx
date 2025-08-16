@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useMemo } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,7 @@ interface SearchParams {
   reisezeitraumBis?: string
   abfahrtAb?: string
   ankunftBis?: string
+  tage?: string // JSON-String mit Array der gewünschten Tage
 }
 
 interface TrainSearchFormProps {
@@ -64,13 +65,56 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
     return ab.toISOString().split("T")[0]
   })
 
-  const berechneteTage = Math.max(1, Math.min(30, Math.ceil((new Date(reisezeitraumBis).getTime() - new Date(reisezeitraumAb).getTime()) / (1000*60*60*24) + 1)))
-
   const switchStations = () => {
     const temp = start
     setStart(ziel)
     setZiel(temp)
   }
+
+  // Wochentage für Auswahl
+  const weekdayLabels = [
+    { label: "Mo", value: 1 },
+    { label: "Di", value: 2 },
+    { label: "Mi", value: 3 },
+    { label: "Do", value: 4 },
+    { label: "Fr", value: 5 },
+    { label: "Sa", value: 6 },
+    { label: "So", value: 0 },
+  ]
+
+  // State für ausgewählte Wochentage (Standard: alle true, oder aus URL-Parametern)
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>(() => {
+    // Versuche aus übergebenen tage-Parametern die Wochentage zu ermitteln
+    if (searchParams.tage) {
+      try {
+        const existingDates = JSON.parse(searchParams.tage) as string[]
+        const weekdays = new Set<number>()
+        existingDates.forEach(dateStr => {
+          const date = new Date(dateStr)
+          weekdays.add(date.getDay())
+        })
+        return Array.from(weekdays)
+      } catch {
+        // Fallback zu allen Tagen bei Parse-Fehlern
+      }
+    }
+    return [1,2,3,4,5,6,0] // Standard: alle Wochentage
+  })
+
+  // Hilfsfunktion: Alle gewünschten Tage im Zeitraum berechnen (limitiert auf max. 30 Tage)
+  const selectedDates = useMemo(() => {
+    const dates: string[] = []
+    const start = new Date(reisezeitraumAb)
+    const end = new Date(reisezeitraumBis)
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (selectedWeekdays.includes(d.getDay())) {
+        dates.push(d.toISOString().split("T")[0])
+        // Limitiere auf maximal 30 Tage
+        if (dates.length >= 30) break
+      }
+    }
+    return dates
+  }, [reisezeitraumAb, reisezeitraumBis, selectedWeekdays])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -95,6 +139,8 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
     const diffTime = new Date(reisezeitraumBis).getTime() - new Date(reisezeitraumAb).getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1
     params.set("dayLimit", Math.max(1, Math.min(30, diffDays)).toString())
+    // Sende die einzelnen Tage als JSON-String
+    params.set("tage", JSON.stringify(selectedDates))
 
     window.location.href = `/?${params.toString()}`
   }
@@ -114,21 +160,18 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
     setDayLimit("3")
     setAbfahrtAb("")
     setAnkunftBis("")
+    setSelectedWeekdays([1,2,3,4,5,6,0]) // Reset zu allen Wochentagen
     // URL bereinigen
     window.history.replaceState({}, document.title, window.location.pathname)
   }
 
   const handleReisezeitraumAbChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setReisezeitraumAb(e.target.value)
-    // Bis-Datum ggf. anpassen
+    // Bis-Datum ggf. anpassen falls es vor dem Ab-Datum liegt
     const ab = new Date(e.target.value)
     const bis = new Date(reisezeitraumBis)
-    const maxBis = new Date(e.target.value)
-    maxBis.setDate(maxBis.getDate() + 30)
     if (bis < ab) {
       setReisezeitraumBis(e.target.value)
-    } else if (bis > maxBis) {
-      setReisezeitraumBis(maxBis.toISOString().split("T")[0])
     }
   }
 
@@ -175,7 +218,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
         {/* Abschnitt 1: Reisedaten */}
         <div>
           <h3 className="text-base font-semibold text-gray-700 mb-2">Reisedaten</h3>
-          <div className="grid grid-cols-[1fr_auto_1fr] gap-4 items-end">
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-6 items-end">
             <div>
               <Label htmlFor="start">
                 <span className="inline-flex items-center gap-1">
@@ -220,7 +263,7 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
               />
             </div>
           </div>
-          <div className="flex flex-row flex-wrap gap-4 mt-2 items-end">
+          <div className="flex flex-row flex-wrap gap-6 mt-2 items-end">
             <div className="min-w-[140px] flex-1 flex flex-col justify-end">
               <Label htmlFor="reisezeitraumAb">
                 <span className="inline-flex items-center gap-1">
@@ -234,67 +277,135 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
               <Label htmlFor="reisezeitraumBis">
                 <span className="inline-flex items-center gap-1">
                   <CalendarCheck className="w-4 h-4 text-black" />
-                  Reisezeitraum bis (max. 30 Tage nach Start)
+                  Reisezeitraum bis
                 </span>
               </Label>
               <Input
                 id="reisezeitraumBis"
                 type="date"
                 min={reisezeitraumAb}
-                max={(() => {
-                  const ab = new Date(reisezeitraumAb)
-                  ab.setDate(ab.getDate() + 30)
-                  return ab.toISOString().split("T")[0]
-                })()}
                 value={reisezeitraumBis}
                 onChange={e => setReisezeitraumBis(e.target.value)}
                 className="mt-1 h-10"
               />
             </div>
           </div>
-          {/* Info-Banner für Zeitraum-Optimierung */}
-          {berechneteTage > 7 && (
-            <div className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded flex items-start gap-2">
-              <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <div>
-                <p className="font-medium">💡 Tipp für schnellere Abfragen</p>
-                <p>Je weniger Tage Du abfragst, desto schneller erhältst du Ergebnisse. Wähle nur den Zeitraum, den du wirklich benötigst.</p>
-              </div>
-            </div>
-          )}
           {/* Zeitfilter - Optional */}
-          <div className="flex flex-row flex-wrap gap-4 mt-4">
-            <div className="min-w-[140px] flex-1">
-              <Label htmlFor="abfahrtAb">
+          <div className="flex flex-row flex-wrap gap-6 mt-4">
+            <div className="min-w-[140px] flex-1 relative">
+              <Label htmlFor="abfahrtAb" className="whitespace-nowrap overflow-hidden text-ellipsis block min-h-[22px]">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="w-4 h-4 text-black" />
                   Abfahrt ab (optional)
                 </span>
               </Label>
-              <Input 
-                id="abfahrtAb" 
-                type="time" 
-                value={abfahrtAb} 
-                onChange={(e) => setAbfahrtAb(e.target.value)} 
-                className="mt-1" 
-              />
+              <div className="relative min-h-[40px]">
+                <Input 
+                  id="abfahrtAb" 
+                  type="time" 
+                  value={abfahrtAb} 
+                  onChange={(e) => setAbfahrtAb(e.target.value)} 
+                  className="mt-1 pr-8 h-10 align-middle" 
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none flex items-center justify-center"
+                  style={{width: 20, height: 20, lineHeight: 1}}
+                  onClick={() => setAbfahrtAb("")}
+                  tabIndex={-1}
+                  aria-label="Abfahrt ab zurücksetzen"
+                  disabled={!abfahrtAb}
+                >
+                  {abfahrtAb ? (
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{display: 'block'}}><path d="M6 6l8 8M6 14L14 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  ) : (
+                    <span style={{width: 16, height: 16, display: 'inline-block'}}></span>
+                  )}
+                </button>
+              </div>
             </div>
-            <div className="min-w-[140px] flex-1">
-              <Label htmlFor="ankunftBis">
+            <div className="min-w-[140px] flex-1 relative">
+              <Label htmlFor="ankunftBis" className="whitespace-nowrap overflow-hidden text-ellipsis block min-h-[22px]">
                 <span className="inline-flex items-center gap-1">
                   <Clock className="w-4 h-4 text-black" />
                   Ankunft bis (optional)
                 </span>
               </Label>
-              <Input 
-                id="ankunftBis" 
-                type="time" 
-                value={ankunftBis} 
-                onChange={(e) => setAnkunftBis(e.target.value)} 
-                className="mt-1" 
-              />
+              <div className="relative min-h-[40px]">
+                <Input 
+                  id="ankunftBis" 
+                  type="time" 
+                  value={ankunftBis} 
+                  onChange={(e) => setAnkunftBis(e.target.value)} 
+                  className="mt-1 pr-8 h-10 align-middle" 
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none flex items-center justify-center"
+                  style={{width: 20, height: 20, lineHeight: 1}}
+                  onClick={() => setAnkunftBis("")}
+                  tabIndex={-1}
+                  aria-label="Ankunft bis zurücksetzen"
+                  disabled={!ankunftBis}
+                >
+                  {ankunftBis ? (
+                    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{display: 'block'}}><path d="M6 6l8 8M6 14L14 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                  ) : (
+                    <span style={{width: 16, height: 16, display: 'inline-block'}}></span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          {/* Wochentagsauswahl */}
+          <div className="mt-4">
+            <Label className="text-sm text-gray-700 mb-2 block">Nur diese Wochentage:</Label>
+            <div className="flex flex-row flex-wrap gap-3">
+              {weekdayLabels.map(wd => (
+                <div key={wd.value} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`weekday-${wd.value}`}
+                    checked={selectedWeekdays.includes(wd.value)}
+                    onCheckedChange={(checked) => {
+                      setSelectedWeekdays(prev =>
+                        checked
+                          ? [...prev, wd.value]
+                          : prev.filter(v => v !== wd.value)
+                      )
+                    }}
+                  />
+                  <Label htmlFor={`weekday-${wd.value}`} className="text-sm font-medium">
+                    {wd.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Dynamische Info/Warnbox zu den ausgewählten Tagen */}
+          <div className={`mt-3 text-sm p-3 rounded flex items-start gap-2 border ${
+            selectedDates.length >= 30
+              ? 'text-orange-700 bg-orange-50 border-orange-200'
+              : selectedDates.length > 10
+                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                : 'text-green-700 bg-green-50 border-green-200'
+          }`}>
+            <span className="mt-0.5 flex-shrink-0 text-xl select-none">
+              {selectedDates.length >= 30 ? '⚠️' : selectedDates.length > 10 ? '💡' : '✅'}
+            </span>
+            <div>
+              <span className="font-medium">
+                {selectedDates.length} von max. 30 möglichen Tagen werden abgefragt
+                {selectedDates.length >= 30 && " (Maximum erreicht)"}
+              </span>
+              {selectedDates.length >= 30 && (
+                <p className="mt-2 font-medium">Es werden nur die ersten 30 Tage abgefragt. Für eine vollständige Suche verkürze bitte den Zeitraum oder wähle weniger Wochentage aus.</p>
+              )}
+              {selectedDates.length > 10 && selectedDates.length < 30 && (
+                <p className="mt-2 font-medium">Je weniger Tage Du abfragst, desto schneller erhältst du Ergebnisse. Wähle nur den Zeitraum, den du wirklich benötigst.</p>
+              )}
+              {selectedDates.length > 0 && selectedDates.length <= 10 && (
+                <p className="mt-2 font-medium">Optimale Auswahl – die Abfrage wird besonders schnell durchgeführt!</p>
+              )}
             </div>
           </div>
         </div>
@@ -441,14 +552,6 @@ export function TrainSearchForm({ searchParams }: TrainSearchFormProps) {
           <Button type="button" variant="outline" onClick={handleReset}>
             Zurücksetzen
           </Button>
-        </div>
-
-        <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded">
-          <p className="font-medium">ℹ️ Bestpreissuche mit Kalenderansicht</p>
-          <p>Findet die günstigsten Preise für {berechneteTage} aufeinanderfolgende Tage.</p>
-          <p>
-            Verarbeitungszeit: ca. {Math.ceil(berechneteTage * 2)}–{Math.ceil(berechneteTage * 3)} Sekunden.
-          </p>
         </div>
       </form>
     </div>

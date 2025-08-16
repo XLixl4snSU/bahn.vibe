@@ -1,10 +1,10 @@
 import { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
-    return {
-        name: 'bahn.vibe Preiskalender',
-        short_name: "bahn.vibe",
-        description: "Erhalte die besten Preise für dein Bahnticket mit bahn.vibe Preiskalender",
+  return {
+    name: 'sparpreis-vibe',
+    short_name: 'sparpreis-vibe',
+    description: 'Finde die günstigste Bahnreise mit einem Preiskalender',
         start_url: '/',
         display: 'standalone',
         background_color: '#1E283A',

@@ -2,7 +2,7 @@
 FROM node:20-alpine AS builder
 
 # pnpm installieren 
-RUN npm install -g pnpm@7
+RUN npm install -g pnpm
 
 # 2. Arbeitsverzeichnis
 WORKDIR /app

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { globalRateLimiter } from "@/app/api/search-prices/rate-limiter"
 
 // In-Memory Storage für Progress-Daten
 const progressStorage = new Map<string, {
@@ -13,6 +14,7 @@ const progressStorage = new Map<string, {
   queueSize?: number
   activeRequests?: number
   timestamp: number
+  isActiveSearch?: boolean // Markiert aktive Suchen
 }>()
 
 // GET - Progress-Daten abrufen
@@ -40,13 +42,48 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Berechne geschätzte verbleibende Zeit
+    const queueStatus = globalRateLimiter.getQueueStatus(sessionId)
+
+    // Berechne Anzahl aktiver Suchanfragen (nicht abgeschlossene Sessions)
+    const activeSearchCount = Array.from(progressStorage.values()).filter(
+      session => !session.isComplete && (Date.now() - session.timestamp) < 30000 // Aktiv in letzten 30 Sekunden
+    ).length
+
+    // Berechne geschätzte verbleibende Zeit mit realistischer Logik
     let estimatedTimeRemaining = 0
-    if (!progressData.isComplete && progressData.uncachedDays && progressData.averageUncachedResponseTime) {
-      // Grobe Schätzung: verbleibende ungecachte Tage * durchschnittliche API-Zeit + Rate Limiting
-      const baseTime = progressData.uncachedDays * (progressData.averageUncachedResponseTime / 1000)
-      const rateLimitingTime = progressData.uncachedDays * 1 // 1 Sekunde pro API-Call wegen Rate Limiting
-      estimatedTimeRemaining = Math.round(baseTime + rateLimitingTime)
+    if (!progressData.isComplete) {
+      const remainingDays = Math.max(0, progressData.totalDays - progressData.currentDay)
+      const uncachedDays = progressData.uncachedDays || remainingDays
+      
+      if (uncachedDays > 0) {
+        // Basis: Durchschnittliche API-Zeit pro Request (realistischer: 1-2 Sekunden)
+        const avgApiTime = Math.min((progressData.averageUncachedResponseTime || 1500) / 1000, 3) // Max 3s pro Request
+        const baseTime = uncachedDays * avgApiTime
+        
+        // Rate Limiting: Konservativ 1.2 Sekunden zwischen API-Calls
+        const rateLimitTime = uncachedDays * 1.2
+        
+        // Round-Robin Faktor: Moderater bei mehreren Nutzern
+        const totalUsers = Math.max(1, activeSearchCount)
+        const roundRobinFactor = totalUsers > 1 ? Math.min(1 + (totalUsers - 1) * 0.15, 1.5) : 1.0 // Maximal 50% länger
+        
+        // Berücksichtige parallele Verarbeitung (bis zu 3 concurrent requests)
+        const concurrentRequests = Math.min(3, totalUsers)
+        const parallelismBonus = concurrentRequests > 1 ? Math.max(0.6, 1 - (concurrentRequests - 1) * 0.2) : 1.0 // Bis zu 40% schneller
+        
+        // Finale ETA = (Basis + Rate Limit) * Round-Robin Faktor * Parallelismus Bonus
+        estimatedTimeRemaining = Math.round(
+          (baseTime + rateLimitTime) * roundRobinFactor * parallelismBonus
+        )
+        
+        // Realistische Grenzen: 1 Sekunde bis 2 Minuten
+        estimatedTimeRemaining = Math.min(Math.max(estimatedTimeRemaining, 1), 120)
+        
+        console.log(`📊 ETA for ${sessionId}: ${uncachedDays} uncached days, ${totalUsers} users, ${Math.round(avgApiTime)}s avg → ${estimatedTimeRemaining}s`)
+      } else if (remainingDays > 0) {
+        // Nur gecachte Tage verbleibend - sehr schnell
+        estimatedTimeRemaining = Math.min(remainingDays * 0.2, 5)
+      }
     }
 
     return NextResponse.json({
@@ -56,8 +93,11 @@ export async function GET(request: NextRequest) {
       isComplete: progressData.isComplete,
       estimatedTimeRemaining,
       queueSize: progressData.queueSize || 0,
-      activeRequests: progressData.activeRequests || 0
+      activeRequests: progressData.activeRequests || 0,
+      // Verwende tatsächlich aktive Suchanfragen statt Queue-Status
+      totalUsers: activeSearchCount
     })
+
   } catch (error) {
     console.error("Error getting progress:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

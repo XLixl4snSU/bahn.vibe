@@ -10,6 +10,7 @@ interface SearchParams {
   nurDeutschlandTicketVerbindungen?: string
   maximaleUmstiege?: string
   dayLimit?: string
+  tage?: string // JSON-String mit Array der gewünschten Tage
 }
 
 export default async function Page({
@@ -25,9 +26,8 @@ export default async function Page({
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <header className="mb-8">
           <h1 className="text-4xl font-bold mb-2">
-
             <a href="/" className="text-gray-600 hover:text-retro-gradient">
-              bahn.vibe
+              sparpreis.vibe
             </a>
           </h1>
           <p className="text-gray-600 italic">Finde die günstigste Bahnreise mit einem Preiskalender</p>

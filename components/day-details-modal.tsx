@@ -1,9 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp, GraduationCap, User, Percent, Shuffle, Clock } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { MapPin, ArrowRight, Euro, Calendar, Train, TrendingUp, GraduationCap, User, Percent, Shuffle, Clock, Filter, Info } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 interface Interval {
   preis: number
@@ -22,6 +25,8 @@ interface IntervalData {
   abfahrtsOrt: string
   ankunftsOrt: string
   info: string
+  umstiegsAnzahl?: number
+  isCheapestPerInterval?: boolean
 }
 
 interface PriceData {
@@ -114,6 +119,8 @@ export function DayDetailsModal({
   zielStation,
   searchParams,
 }: DayDetailsModalProps) {
+  const [showOnlyCheapest, setShowOnlyCheapest] = useState(true)
+
   if (!date || !data) return null
 
   const dateObj = new Date(date)
@@ -125,12 +132,18 @@ export function DayDetailsModal({
   })
 
   const intervals = data.allIntervals || []
+  
+  // Filter intervals based on toggle state
+  const displayedIntervals = showOnlyCheapest 
+    ? intervals.filter(interval => interval.isCheapestPerInterval === true)
+    : intervals
 
   // Check if this is a weekend
   const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6
   
   // Check if there are multiple intervals
   const hasMultipleIntervals = intervals.length > 1
+  const hasMultipleCheapestIntervals = intervals.filter(i => i.isCheapestPerInterval === true).length > 1
 
   const calculateDuration = (departure: string, arrival: string) => {
     const dep = new Date(departure)
@@ -214,13 +227,38 @@ export function DayDetailsModal({
           {/* All Available Connections */}
           {hasMultipleIntervals && (
             <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-800 mb-4 flex items-center gap-2">
-                <Train className="h-4 w-4" />
-                Alle verfügbaren Verbindungen ({intervals.length})
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-blue-800 flex items-center gap-2">
+                  <Train className="h-4 w-4" />
+                  Alle verfügbaren Verbindungen ({intervals.length})
+                </h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-blue-700">Nur günstigste Fahrt im Bestpreis-Zeitfenster</span>
+                  <Switch
+                    checked={showOnlyCheapest}
+                    onCheckedChange={setShowOnlyCheapest}
+                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-blue-600" aria-label="Info zu Zeitfenstern">
+                        <Info className="h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="max-w-xs text-sm text-gray-700">
+                      <div className="font-semibold mb-1 text-blue-800">Bestpreis-Zeitfenster</div>
+                      <div>
+                        Die Bahn gruppiert Bestpreis-Verbindungen in folgende Zeitfenster:<br />
+                        0–7 Uhr, 10–13 Uhr, 13–16 Uhr, 16–19 Uhr, 19–24 Uhr.<br />
+                        Pro Zeitfenster wird jeweils die günstigste Verbindung angezeigt.<br />
+                        Dies entspricht der offiziellen Bestpreis-Suche der Bahn.
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
 
-              <div className="space-y-3 overflow-y-auto">
-                {intervals.map((interval: any, index: number) => {
+              <div className="space-y-3 overflow-y-auto max-h-96">
+                {displayedIntervals.map((interval: any, index: number) => {
                   const bookingLink =
                     startStation && zielStation
                       ? createBookingLink(
