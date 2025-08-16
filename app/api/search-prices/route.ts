@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
               // Markiere Session nur einmal als abgebrochen
               if (!cancelNotificationSent && sessionId) {
                 cancelNotificationSent = true
-                fetch('http://localhost:3000/api/search-prices/cancel-search', {
+                fetch('/api/search-prices/cancel-search', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ sessionId, reason: 'stream_closed' })

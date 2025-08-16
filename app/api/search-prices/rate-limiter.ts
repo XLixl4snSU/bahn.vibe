@@ -374,8 +374,7 @@ class GlobalRateLimiter {
   // Prüfe ob Session abgebrochen wurde
   private async isSessionCancelled(sessionId: string): Promise<boolean> {
     try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-      const response = await fetch(`${baseUrl}/api/search-prices/cancel-search?sessionId=${sessionId}`)
+      const response = await fetch(`/api/search-prices/cancel-search?sessionId=${sessionId}`)
       if (response.ok) {
         const data = await response.json()
         return data.isCancelled === true
