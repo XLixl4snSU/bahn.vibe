@@ -1,15 +1,12 @@
 {
-  "name": "sparpreis-vibe",
+  "name": "sparpreis.guru",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "build": "next build",
-    "build:production": "NODE_ENV=production LOG_LEVEL=info next build",
     "dev": "next dev",
-    "dev:debug": "LOG_LEVEL=debug next dev",
     "lint": "next lint",
-    "start": "next start",
-    "start:production": "NODE_ENV=production LOG_LEVEL=warn next start"
+    "start": "next start"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

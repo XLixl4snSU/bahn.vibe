@@ -1,4 +1,4 @@
-# 🚂 bahn.vibe
+# 🚂 sparpreis.guru
 
 **Find the cheapest train tickets for every day of the month**
 

@@ -27,7 +27,7 @@ export default async function Page({
         <header className="mb-8">
           <h1 className="text-4xl font-bold mb-2">
             <a href="/" className="text-gray-600 hover:text-retro-gradient">
-              sparpreis.vibe
+              sparpreis.guru
             </a>
           </h1>
           <p className="text-gray-600 italic">Finde die günstigste Bahnreise mit einem Preiskalender</p>

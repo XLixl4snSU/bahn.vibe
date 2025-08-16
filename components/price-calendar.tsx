@@ -206,6 +206,7 @@ export function PriceCalendar({ results, onDayClick, startStation, zielStation, 
   // Popup bei Tab-Wechsel/-Schließen während Suche
   const [showAbortModal, setShowAbortModal] = useState(false)
   const [cancelNotificationSent, setCancelNotificationSent] = useState(false)
+  const [userCancelled, setUserCancelled] = useState(false)
   
   useEffect(() => {
     if (!isStreaming || !sessionId) return
@@ -333,11 +334,17 @@ export function PriceCalendar({ results, onDayClick, startStation, zielStation, 
           )}
           {isStreaming && onCancelSearch && (
             <button
-              onClick={onCancelSearch}
+              onClick={() => {
+                setUserCancelled(true)
+                onCancelSearch()
+              }}
               className="px-3 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded transition-colors"
             >
               🛑 Abbrechen
             </button>
+          )}
+          {userCancelled && isStreaming && (
+            <span className="text-orange-600">🛑 Wird abgebrochen... (sammle letzte Ergebnisse)</span>
           )}
         </div>
       </div>

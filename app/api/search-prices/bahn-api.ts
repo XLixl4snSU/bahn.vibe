@@ -545,11 +545,25 @@ export async function getBestPrice(config: any): Promise<{ result: TrainResults 
 
     return { result, wasApiCall: true }
   } catch (error) {
-    console.error(`Error in bestpreissuche for ${tag}:`, error)
+    // Spezielle Behandlung für cancelled sessions
+    if (error instanceof Error && error.message.includes('was cancelled')) {
+      console.log(`ℹ️ Search for ${tag} was cancelled by user`)
+      const result = {
+        [tag]: {
+          preis: 0,
+          info: "Search cancelled",
+          abfahrtsZeitpunkt: "",
+          ankunftsZeitpunkt: "",
+        },
+      }
+      return { result, wasApiCall: true }
+    }
+    
+    console.error(`❌ API error for ${tag}:`, error instanceof Error ? error.message : error)
     const result = {
       [tag]: {
         preis: 0,
-        info: `Fetch Error: ${error instanceof Error ? error.message : "Unknown"}`,
+        info: `API Error: ${error instanceof Error ? error.message : "Unknown"}`,
         abfahrtsZeitpunkt: "",
         ankunftsZeitpunkt: "",
       },

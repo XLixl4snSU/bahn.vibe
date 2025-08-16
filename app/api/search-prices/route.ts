@@ -283,8 +283,15 @@ export async function POST(request: NextRequest) {
 
               return true
             } catch (error) {
-              console.error(`Error processing request:`, error)
               completedRequests++
+              
+              // Behandle cancelled sessions nicht als Fehler
+              if (error instanceof Error && error.message.includes('was cancelled')) {
+                console.log(`ℹ️ Request was cancelled (user aborted search)`)
+                return true
+              }
+              
+              console.error(`❌ Error processing request:`, error)
               return true
             }
           }
